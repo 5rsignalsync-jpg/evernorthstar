@@ -1,0 +1,51 @@
+# Keep the Docker build context small. Exclude everything that isn't needed
+# at runtime — saves bandwidth on `fly deploy` and shrinks layers.
+
+# Local data + generated artifacts
+data/
+*.duckdb
+*.duckdb.wal
+*.parquet
+*.db
+*.sqlite
+*.sqlite3
+
+# Python caches
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Frontend — Vercel builds it separately, never needs to be in backend image
+web/
+
+# Secrets
+.env
+.env.local
+.env.*.local
+
+# Tests not needed in prod image
+tests/
+
+# Tooling / git / editor noise
+.git/
+.github/
+.gitignore
+.claude/
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Misc
+Dockerfile
+.dockerignore
+DEPLOY.md
+*.md
+!README.md
+
+# Launchd plist is local-only
+*.plist

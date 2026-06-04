@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Data — large + regeneratable
+data/
+*.duckdb
+*.duckdb.wal
+*.parquet
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+
+# Node / Next.js (web/ subdir later)
+node_modules/
+.next/
+out/
+.turbo/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Claude Code session/agent state — machine-local, not for git
+.claude/
+
+# Launchd plists — local to your Mac
+*.plist
+

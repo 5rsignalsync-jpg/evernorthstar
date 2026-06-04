@@ -1,0 +1,29 @@
+# Hourly data refresh — runs scripts/refresh_all.py inside the live Fly machine
+# via flyctl ssh, so DuckDB writes land directly on the persistent volume.
+#
+# --skip-news is set because FinBERT (~1.5GB peak RAM) doesn't fit on the
+# 1024MB Fly machine. News ingest still happens locally via launchd on the
+# Mac, OR you can flip this to a beefier machine and remove --skip-news.
+#
+# Requires repo secret FLY_API_TOKEN.
+
+name: Hourly data refresh
+
+on:
+  schedule:
+    - cron: '15 * * * *'   # every hour at :15 past
+  workflow_dispatch:       # also runnable manually from the Actions tab
+
+jobs:
+  refresh:
+    name: Refresh prices + scores
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Run refresh on Fly
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          flyctl ssh console -a 5r-signal-sync \
+            -C "python -m scripts.refresh_all --skip-news"

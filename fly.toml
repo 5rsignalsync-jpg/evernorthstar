@@ -1,0 +1,52 @@
+# Fly.io app config for 5R Signal Sync backend.
+#
+# Architecture:
+#   - 1 machine (single-instance is required for SQLite + DuckDB file locks)
+#   - shared-cpu-1x@1024MB is the cheapest viable size; auto-stops when idle
+#   - 1GB persistent volume at /data holds DuckDB + SQLite users
+#
+# Cost: with auto_stop_machines=true and low traffic, ~$0-3/mo. Without
+# scale-to-zero this would be ~$2/mo for the machine + ~$0.15/mo for the volume.
+
+app = "5r-signal-sync"
+primary_region = "iad"   # Ashburn VA, low-latency to most US users
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  # Settings.cors_origins reads from env. Frontend Vercel URL goes here.
+  # NOTE: set the rest (SECRET_KEY, STRIPE_*, NOWPAYMENTS_*, FMP_API_KEY,
+  # DEV_MODE=false, APP_BASE_URL) as Fly secrets: `fly secrets set KEY=value`
+  CORS_ORIGINS = "https://5r-signal-sync.vercel.app,http://localhost:3000"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"     # halt when idle to save money
+  auto_start_machines = true       # wake on first request (~1-2s cold start)
+  min_machines_running = 0         # truly 0 when idle = $0 compute
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 100
+    soft_limit = 80
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1024mb"
+
+# Persistent volume — DuckDB analytics + SQLite auth.
+# Create with: fly volumes create signal_data --region iad --size 1
+[[mounts]]
+  source = "signal_data"
+  destination = "/data"
