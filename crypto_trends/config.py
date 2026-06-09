@@ -55,7 +55,7 @@ class Settings(BaseSettings):
 
     # CORS — comma-separated list of allowed frontend origins. Dev default is
     # localhost:3000; in prod set to your Vercel URL (e.g.
-    # "https://theevernorthstar.vercel.app,https://signalsync.5royals.com").
+    # "https://evernorthstar.vercel.app,https://signalsync.5royals.com").
     # Credentials + cookies require explicit origins; cannot use "*".
     cors_origins: str = "http://localhost:3000"
 

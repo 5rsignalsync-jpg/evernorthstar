@@ -35,7 +35,7 @@ export default function SignInPage() {
           Sign in
         </h1>
         <p className="text-sm text-zinc-500 mb-6">
-          Welcome back to The<span className="text-emerald-400">Ever</span>Northstar.
+          Welcome back to <span className="text-emerald-400">Ever</span>Northstar.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-3">

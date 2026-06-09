@@ -1,4 +1,4 @@
-# Fly.io app config for TheEverNorthstar backend.
+# Fly.io app config for EverNorthstar backend.
 #
 # Architecture:
 #   - 1 machine (single-instance is required for SQLite + DuckDB file locks)
@@ -8,7 +8,7 @@
 # Cost: with auto_stop_machines=true and low traffic, ~$0-3/mo. Without
 # scale-to-zero this would be ~$2/mo for the machine + ~$0.15/mo for the volume.
 
-app = "theevernorthstar"
+app = "evernorthstar"
 primary_region = "iad"   # Ashburn VA, low-latency to most US users
 
 [build]
@@ -19,7 +19,7 @@ primary_region = "iad"   # Ashburn VA, low-latency to most US users
   # Settings.cors_origins reads from env. Frontend Vercel URL goes here.
   # NOTE: set the rest (SECRET_KEY, STRIPE_*, NOWPAYMENTS_*, FMP_API_KEY,
   # DEV_MODE=false, APP_BASE_URL) as Fly secrets: `fly secrets set KEY=value`
-  CORS_ORIGINS = "https://theevernorthstar.vercel.app,http://localhost:3000"
+  CORS_ORIGINS = "https://evernorthstar.vercel.app,http://localhost:3000"
 
 [http_service]
   internal_port = 8080

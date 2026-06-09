@@ -125,7 +125,7 @@ export default function PricingPage() {
         </Link>
 
         <h1 className="text-3xl font-semibold tracking-tight mb-2">
-          The<span className="text-emerald-400">Ever</span>Northstar · Pricing
+          <span className="text-emerald-400">Ever</span>Northstar · Pricing
         </h1>
         <p className="text-sm text-zinc-400 mb-8">
           Honest pricing for an honest research tool. Cancel any time, refund

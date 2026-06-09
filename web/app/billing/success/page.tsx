@@ -19,7 +19,7 @@ export default function BillingSuccessPage() {
       <div className="w-full max-w-md text-center">
         <div className="text-5xl mb-4">🎉</div>
         <h1 className="text-2xl font-semibold tracking-tight mb-2">
-          Welcome to The<span className="text-emerald-400">Ever</span>Northstar Pro
+          Welcome to <span className="text-emerald-400">Ever</span>Northstar Pro
         </h1>
         <p className="text-sm text-zinc-400 mb-6 leading-relaxed">
           Your subscription is active. The dashboard will unlock the rest of the

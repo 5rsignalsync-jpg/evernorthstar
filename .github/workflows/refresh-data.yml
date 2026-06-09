@@ -25,5 +25,5 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
-          flyctl ssh console -a theevernorthstar \
+          flyctl ssh console -a evernorthstar \
             -C "python -m scripts.refresh_all --skip-news"

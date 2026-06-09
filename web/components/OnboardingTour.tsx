@@ -46,7 +46,7 @@ export function OnboardingTour() {
         </button>
 
         <h2 id="onboarding-title" className="text-xl font-semibold text-zinc-100 mb-2">
-          Welcome to The<span className="text-emerald-400">Ever</span>Northstar 👋
+          Welcome to <span className="text-emerald-400">Ever</span>Northstar 👋
         </h2>
         <p className="text-sm text-zinc-400 mb-4 leading-relaxed">
           Honest signals. Smart money. Always pointing north. ⭐{" "}

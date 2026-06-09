@@ -1,4 +1,4 @@
-# Deploying TheEverNorthstar (Tier A: ~$0–3/mo)
+# Deploying EverNorthstar (Tier A: ~$0–3/mo)
 
 Step-by-step. No jargon. You'll need ~45 minutes of clicking + waiting.
 
@@ -33,23 +33,23 @@ GitHub stores the code and runs the hourly data refresh.
 
 1. **Make a new repo on GitHub.**
    - Go to https://github.com/new
-   - Repository name: `theevernorthstar`
+   - Repository name: `evernorthstar`
    - Visibility: **Public** (so GitHub Actions cron stays free with unlimited minutes)
    - **Don't** initialize with README, .gitignore, or license — we already have files
    - Click **Create repository**
 
 2. **Copy the SSH URL.** On the next page, copy the line that looks like:
    ```
-   git@github.com:YOUR_USERNAME/theevernorthstar.git
+   git@github.com:YOUR_USERNAME/evernorthstar.git
    ```
 
 3. **In your terminal**, from `~/Desktop/crypto-trends`:
    ```bash
    cd ~/Desktop/crypto-trends
    git add .
-   git commit -m "Initial commit — TheEverNorthstar"
+   git commit -m "Initial commit — EverNorthstar"
    git branch -M main
-   git remote add origin git@github.com:YOUR_USERNAME/theevernorthstar.git
+   git remote add origin git@github.com:YOUR_USERNAME/evernorthstar.git
    git push -u origin main
    ```
 
@@ -77,16 +77,16 @@ This is what runs your FastAPI endpoints (`/rankings`, `/auth/*`, `/billing/*`, 
    ```
    This opens a browser tab — log in / sign up there, then return to the terminal.
 
-3. **Create the Fly app.** This claims the name `theevernorthstar` and links the directory to Fly's records:
+3. **Create the Fly app.** This claims the name `evernorthstar` and links the directory to Fly's records:
    ```bash
    cd ~/Desktop/crypto-trends
-   fly apps create theevernorthstar --org personal
+   fly apps create evernorthstar --org personal
    ```
-   If `theevernorthstar` is taken, pick another name and **update the `app = ` line in `fly.toml`** to match.
+   If `evernorthstar` is taken, pick another name and **update the `app = ` line in `fly.toml`** to match.
 
 4. **Create the persistent volume.** This is where your DuckDB lives:
    ```bash
-   fly volumes create signal_data --region iad --size 1 --app theevernorthstar
+   fly volumes create signal_data --region iad --size 1 --app evernorthstar
    ```
    Confirm "yes" when it warns about single-region storage. 1 GB is plenty for now.
 
@@ -94,54 +94,54 @@ This is what runs your FastAPI endpoints (`/rankings`, `/auth/*`, `/billing/*`, 
 
    ```bash
    # Generated production SECRET_KEY (cryptographically strong, 64 bytes)
-   fly secrets set SECRET_KEY="REPLACE_WITH_THE_KEY_AT_BOTTOM_OF_THIS_FILE" --app theevernorthstar
+   fly secrets set SECRET_KEY="REPLACE_WITH_THE_KEY_AT_BOTTOM_OF_THIS_FILE" --app evernorthstar
 
    # Disables dev-mode fail-fast bypass
-   fly secrets set DEV_MODE=false --app theevernorthstar
+   fly secrets set DEV_MODE=false --app evernorthstar
 
    # Your live Vercel URL (we'll get the real one in section 3 — for now use the predicted one)
-   fly secrets set APP_BASE_URL=https://theevernorthstar.vercel.app --app theevernorthstar
+   fly secrets set APP_BASE_URL=https://evernorthstar.vercel.app --app evernorthstar
 
    # Stripe keys (test mode for now — switch to live later)
-   fly secrets set STRIPE_SECRET_KEY=sk_test_... --app theevernorthstar
-   fly secrets set STRIPE_WEBHOOK_SECRET=whsec_... --app theevernorthstar
-   fly secrets set STRIPE_PRICE_PRO_MONTHLY=price_... --app theevernorthstar
-   fly secrets set STRIPE_PRICE_PRO_ANNUAL=price_... --app theevernorthstar
+   fly secrets set STRIPE_SECRET_KEY=sk_test_... --app evernorthstar
+   fly secrets set STRIPE_WEBHOOK_SECRET=whsec_... --app evernorthstar
+   fly secrets set STRIPE_PRICE_PRO_MONTHLY=price_... --app evernorthstar
+   fly secrets set STRIPE_PRICE_PRO_ANNUAL=price_... --app evernorthstar
 
    # FMP for Congress + earnings (optional — leave blank if you don't have it)
-   fly secrets set FMP_API_KEY=... --app theevernorthstar
+   fly secrets set FMP_API_KEY=... --app evernorthstar
 
    # NOWPayments (only if you've signed up — see project_crypto_trends.md)
-   fly secrets set NOWPAYMENTS_API_KEY=... --app theevernorthstar
-   fly secrets set NOWPAYMENTS_IPN_SECRET=... --app theevernorthstar
+   fly secrets set NOWPAYMENTS_API_KEY=... --app evernorthstar
+   fly secrets set NOWPAYMENTS_IPN_SECRET=... --app evernorthstar
    ```
 
-   To check what's set: `fly secrets list --app theevernorthstar`
+   To check what's set: `fly secrets list --app evernorthstar`
 
 6. **Deploy.** First-time deploy will take 3–6 minutes (building the Docker image):
    ```bash
-   fly deploy --app theevernorthstar
+   fly deploy --app evernorthstar
    ```
 
-7. **Smoke test.** When deploy finishes, you'll see a URL like `https://theevernorthstar.fly.dev`. Test it:
+7. **Smoke test.** When deploy finishes, you'll see a URL like `https://evernorthstar.fly.dev`. Test it:
    ```bash
-   curl https://theevernorthstar.fly.dev/health
+   curl https://evernorthstar.fly.dev/health
    # Should print: {"status":"ok"}
    ```
-   If you get `503` or `502`, run `fly logs --app theevernorthstar` to see what crashed.
+   If you get `503` or `502`, run `fly logs --app evernorthstar` to see what crashed.
 
 ---
 
 ## 3. Deploy the frontend to Vercel (10 min)
 
 ### Why
-This is the public-facing dashboard at https://theevernorthstar.vercel.app
+This is the public-facing dashboard at https://evernorthstar.vercel.app
 
 ### Steps
 
 1. **Go to https://vercel.com/new** and sign in with GitHub.
 
-2. **Import your repo.** Find `theevernorthstar` in the list and click **Import**.
+2. **Import your repo.** Find `evernorthstar` in the list and click **Import**.
 
 3. **Configure the project:**
    - Framework Preset: **Next.js** (should auto-detect)
@@ -149,15 +149,15 @@ This is the public-facing dashboard at https://theevernorthstar.vercel.app
    - Build & Output Settings: leave defaults
    - **Environment Variables:** click "Add" and add:
      - Name: `NEXT_PUBLIC_API_BASE`
-     - Value: `https://theevernorthstar.fly.dev`  *(your Fly app URL from section 2)*
+     - Value: `https://evernorthstar.fly.dev`  *(your Fly app URL from section 2)*
 
 4. **Click Deploy.** Takes 2–4 minutes.
 
-5. **Find your URL.** When done, Vercel shows it — something like `https://theevernorthstar.vercel.app`.
+5. **Find your URL.** When done, Vercel shows it — something like `https://evernorthstar.vercel.app`.
 
 6. **Update the backend CORS** to allow the Vercel URL (if different from default):
    ```bash
-   fly secrets set CORS_ORIGINS="https://theevernorthstar.vercel.app,http://localhost:3000" --app theevernorthstar
+   fly secrets set CORS_ORIGINS="https://evernorthstar.vercel.app,http://localhost:3000" --app evernorthstar
    ```
    This triggers an automatic redeploy of the backend.
 
@@ -202,30 +202,30 @@ Right now your webhooks point at `localhost`. Need to point them at the live Fly
 
 1. Go to https://dashboard.stripe.com/test/webhooks
 2. Click your existing webhook endpoint (or create new if none exists)
-3. Set URL to: `https://theevernorthstar.fly.dev/webhooks/stripe`
+3. Set URL to: `https://evernorthstar.fly.dev/webhooks/stripe`
 4. Events to listen for (if not already): `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`
 5. **Copy the webhook signing secret** (`whsec_...`) and update Fly:
    ```bash
-   fly secrets set STRIPE_WEBHOOK_SECRET=whsec_... --app theevernorthstar
+   fly secrets set STRIPE_WEBHOOK_SECRET=whsec_... --app evernorthstar
    ```
 
 ### NOWPayments (only if you set it up)
 
 1. Go to https://account.nowpayments.io/store/integrations
-2. Set IPN Callback URL: `https://theevernorthstar.fly.dev/webhooks/nowpayments`
+2. Set IPN Callback URL: `https://evernorthstar.fly.dev/webhooks/nowpayments`
 3. Save. The IPN secret you already have in Fly secrets stays the same.
 
 ---
 
 ## 6. Final test (5 min)
 
-1. Open `https://theevernorthstar.vercel.app` in a private window.
+1. Open `https://evernorthstar.vercel.app` in a private window.
 2. Sign up with a test email + password.
 3. Confirm you can log in, see rankings, and add items to your watchlist.
 4. Go to /pricing → click Subscribe Monthly → use test card `4242 4242 4242 4242` → confirm `/billing/success` flips you to Pro.
 5. Sign out → sign back in → confirm Pro status persists.
 
-If anything breaks: `fly logs --app theevernorthstar` is your friend.
+If anything breaks: `fly logs --app evernorthstar` is your friend.
 
 ---
 
@@ -239,7 +239,7 @@ python3 -c "import secrets; print(secrets.token_urlsafe(64))"
 
 Then:
 ```bash
-fly secrets set SECRET_KEY="paste-the-output-here" --app theevernorthstar
+fly secrets set SECRET_KEY="paste-the-output-here" --app evernorthstar
 ```
 
 **Do NOT paste the key into this file or any committed file.** It stays only on Fly (and optionally in your password manager).
