@@ -16,6 +16,32 @@ export type AuthUser = {
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
+/**
+ * Extract a human-readable error message from a FastAPI error response.
+ *
+ * FastAPI returns two shapes for `detail`:
+ *   - `detail: "Email already registered"` (HTTPException) — plain string
+ *   - `detail: [{loc, msg, type, input}, ...]` (422 Pydantic validation)  — array
+ *
+ * Falling back to `JSON.stringify(detail)` for an array gave us literal
+ * "[object Object]" rendered in the UI. Now we extract the field + message
+ * from each entry so users see "email: value is not a valid email address".
+ */
+function extractErrorMessage(body: unknown, status: number): string {
+  if (!body || typeof body !== "object") return `${status}`;
+  const detail = (body as { detail?: unknown }).detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((e: { msg?: string; loc?: (string | number)[] }) => {
+        const field = e.loc && e.loc.length > 0 ? String(e.loc[e.loc.length - 1]) : "field";
+        return `${field}: ${e.msg ?? "invalid"}`;
+      })
+      .join("; ");
+  }
+  return `${status}`;
+}
+
 async function postJSON<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
@@ -27,10 +53,9 @@ async function postJSON<T>(path: string, body: unknown): Promise<T> {
   if (!res.ok) {
     let msg = `${res.status}`;
     try {
-      const j = await res.json();
-      msg = j?.detail ?? msg;
+      msg = extractErrorMessage(await res.json(), res.status);
     } catch {
-      /* ignore */
+      /* ignore — keep status code as fallback */
     }
     throw new Error(msg);
   }
@@ -73,8 +98,7 @@ export async function openBillingPortal(): Promise<string> {
   if (!res.ok) {
     let msg = `${res.status}`;
     try {
-      const j = await res.json();
-      msg = j?.detail ?? msg;
+      msg = extractErrorMessage(await res.json(), res.status);
     } catch {
       /* ignore */
     }

@@ -70,13 +70,24 @@ def main() -> int:
 
     results: list[PhaseResult] = []
 
-    # 1) Crypto OHLCV
+    # 1) Crypto OHLCV — majors (utility-focused, memes excluded)
     if not args.skip_crypto:
         def _crypto():
             from crypto_trends.data.ingest.prices import ingest
             ingest(since=args.crypto_since, size=50)
             return None
         results.append(_run_phase("crypto_ohlcv", _crypto))
+
+    # 1b) Crypto Micro OHLCV — memes + small alts (moonshot sleeve).
+    # Without this phase, crypto_micro signals go stale silently while majors
+    # stay fresh. Bug surfaced in 6/9 smoke test where crypto_micro was 8 days behind.
+    if not args.skip_crypto:
+        def _crypto_micro():
+            from crypto_trends.data.ingest.prices import ingest
+            ingest(since=args.crypto_since, size=30, rank_start=30,
+                   asset_class="crypto_micro")
+            return None
+        results.append(_run_phase("crypto_micro_ohlcv", _crypto_micro))
 
     # 2) Equity OHLCV
     if not args.skip_equities:
@@ -139,7 +150,7 @@ def main() -> int:
                 compute_and_store_long_term, compute_and_store_momentum,
             )
             total = 0
-            for ac in ("crypto", "equity_large", "equity_micro"):
+            for ac in ("crypto", "crypto_micro", "equity_large", "equity_micro"):
                 total += compute_and_store_momentum(asset_class=ac, latest_only=True)
             total += compute_and_store_long_term("equity_large")
             return total

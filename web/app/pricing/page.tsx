@@ -7,6 +7,22 @@ import { useAuth } from "@/components/AuthProvider";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
+/** Same shape-handling as lib/auth.ts: FastAPI 422 returns `detail` as an array. */
+function extractErr(body: unknown, status: number): string {
+  if (!body || typeof body !== "object") return `${status}`;
+  const detail = (body as { detail?: unknown }).detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((e: { msg?: string; loc?: (string | number)[] }) => {
+        const field = e.loc && e.loc.length > 0 ? String(e.loc[e.loc.length - 1]) : "field";
+        return `${field}: ${e.msg ?? "invalid"}`;
+      })
+      .join("; ");
+  }
+  return `${status}`;
+}
+
 async function postCheckout(
   path: string,
   plan: "monthly" | "annual",
@@ -20,8 +36,7 @@ async function postCheckout(
   if (!res.ok) {
     let msg = `${res.status}`;
     try {
-      const j = await res.json();
-      msg = j?.detail ?? msg;
+      msg = extractErr(await res.json(), res.status);
     } catch {
       /* ignore */
     }
