@@ -129,6 +129,11 @@ export function WatchlistTab({
             news_buzz: null,
             news_sentiment: null,
             negative_event: false,
+            // Earnings overlay only fires when this ticker shows up in a live
+            // ranking. Watchlist-only rows have no earnings context — null is
+            // the right placeholder.
+            upcoming_earnings: null,
+            days_to_earnings: null,
             asset_class: w.asset_class,
             sleeve_signal: "momentum_v1",
           }));
