@@ -57,13 +57,26 @@ def _user_public(u: User) -> UserPublic:
 
 
 def _set_session_cookie(response: Response, request: Request, token: str) -> None:
+    """Set the session cookie.
+
+    In production (HTTPS), the frontend (Vercel) and backend (Fly) live on
+    different registrable domains, which makes every auth request a cross-site
+    request. Browsers will only attach the cookie if it was set with
+    `SameSite=None; Secure`. `SameSite=Lax` (the previous default) was fine
+    for same-origin local dev but silently blocked sign-in / sign-up on the
+    deployed app.
+
+    In dev (HTTP), modern browsers reject `SameSite=None` without `Secure`, so
+    we fall back to `Lax` to keep local dev working.
+    """
     secure = request.url.scheme == "https"
+    samesite: str = "none" if secure else "lax"
     response.set_cookie(
         key=settings.auth_cookie_name,
         value=token,
         httponly=True,
         secure=secure,
-        samesite="lax",
+        samesite=samesite,
         max_age=settings.jwt_expiration_days * 24 * 3600,
         path="/",
     )
@@ -123,8 +136,19 @@ def login(
 
 
 @router.post("/logout")
-def logout(response: Response) -> dict:
-    response.delete_cookie(settings.auth_cookie_name, path="/")
+def logout(request: Request, response: Response) -> dict:
+    # Match the attributes used when setting the cookie so the browser actually
+    # overwrites it. In prod the session cookie was set with SameSite=None;
+    # Secure, and the Set-Cookie clear header must match those attrs or some
+    # browsers (esp. Safari) ignore the clear.
+    secure = request.url.scheme == "https"
+    response.delete_cookie(
+        settings.auth_cookie_name,
+        path="/",
+        secure=secure,
+        samesite="none" if secure else "lax",
+        httponly=True,
+    )
     return {"ok": True}
 
 
