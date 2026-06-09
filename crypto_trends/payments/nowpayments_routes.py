@@ -68,7 +68,7 @@ def _amount_usd(plan: str) -> float:
 
 def _description(plan: str) -> str:
     period = "month" if plan == "monthly" else "year"
-    return f"5R Signal Sync Pro — {plan} subscription ({period})"
+    return f"TheEverNorthstar Pro — {plan} subscription ({period})"
 
 
 @router.post("/billing/checkout-crypto", response_model=CryptoCheckoutResponse)

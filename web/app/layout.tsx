@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "5R Signal Sync · Multi-Asset Signals + Smart Money",
+  title: "TheEverNorthstar · Honest signals for smart-money markets",
   description:
     "Track and mirror whale wallets, insider trades, and Congressional filings across "
     + "crypto, equities, and penny stocks. 13F + Form 4 + STOCK Act flows · "

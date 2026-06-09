@@ -50,7 +50,7 @@ def _rate_key(request: Request) -> str:
 
 limiter = Limiter(key_func=_rate_key, default_limits=["60/minute"])
 
-app = FastAPI(title="5R Signal Sync", version="0.1.0")
+app = FastAPI(title="TheEverNorthstar", version="0.1.0")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 

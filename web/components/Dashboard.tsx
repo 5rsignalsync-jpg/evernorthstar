@@ -139,10 +139,10 @@ export function Dashboard() {
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-baseline flex-wrap gap-2">
             <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">
-              <span className="text-emerald-400">5R</span> Signal Sync
+              The<span className="text-emerald-400">Ever</span>Northstar
             </h1>
             <span className="text-zinc-500 text-sm">
-              · Multi-asset signals + smart money
+              · Honest signals. Smart money. Always pointing north. ⭐
             </span>
           </div>
           <div className="pt-1 shrink-0 flex items-center gap-4">
@@ -157,7 +157,7 @@ export function Dashboard() {
           to track it in your watchlist.
         </p>
         <p className="text-[11px] text-amber-300/90 mt-2">
-          <strong>Not financial advice.</strong> 5R Signal Sync is a research
+          <strong>Not financial advice.</strong> TheEverNorthstar is a research
           tool — backtests use realistic costs and the harness honestly tells you
           when a signal doesn&apos;t work. Trading carries substantial risk
           including total loss of principal.

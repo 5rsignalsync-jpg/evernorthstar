@@ -27,8 +27,9 @@ ENV PATH="/root/.local/bin:$PATH"
 
 WORKDIR /app
 
-# Copy lockfile + project metadata first so deps can be cached across code changes
-COPY pyproject.toml uv.lock README.md ./
+# Copy lockfile + project metadata first so deps can be cached across code changes.
+# README.md is not present in this repo; pyproject doesn't reference it either.
+COPY pyproject.toml uv.lock ./
 COPY crypto_trends/__init__.py crypto_trends/__init__.py
 
 # Install deps into a project-local .venv. --no-dev skips pytest/ruff.

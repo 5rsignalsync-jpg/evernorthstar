@@ -46,11 +46,11 @@ export function OnboardingTour() {
         </button>
 
         <h2 id="onboarding-title" className="text-xl font-semibold text-zinc-100 mb-2">
-          Welcome to <span className="text-emerald-400">5R</span> Signal Sync 👋
+          Welcome to The<span className="text-emerald-400">Ever</span>Northstar 👋
         </h2>
         <p className="text-sm text-zinc-400 mb-4 leading-relaxed">
-          Multi-asset signals + smart-money tracking, with honest backtests instead
-          of pretty numbers. Three things to know:
+          Honest signals. Smart money. Always pointing north. ⭐{" "}
+          Three things to know:
         </p>
 
         <ul className="space-y-2.5 text-sm text-zinc-300 mb-5">

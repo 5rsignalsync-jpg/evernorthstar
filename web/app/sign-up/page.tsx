@@ -32,7 +32,7 @@ export default function SignUpPage() {
     <main className="min-h-screen bg-zinc-950 text-zinc-100 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <h1 className="text-2xl font-semibold tracking-tight mb-2">
-          Join <span className="text-emerald-400">5R</span> Signal Sync
+          Join The<span className="text-emerald-400">Ever</span>Northstar
         </h1>
         <p className="text-sm text-zinc-500 mb-6">
           Free forever. Pro unlocks all sleeves, real-time refresh, and alerts.

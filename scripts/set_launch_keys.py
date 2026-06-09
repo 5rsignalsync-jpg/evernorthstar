@@ -133,7 +133,7 @@ def main() -> int:
 
     print()
     print("=" * 60)
-    print("  5R Signal Sync — launch key setup")
+    print("  TheEverNorthstar — launch key setup")
     print("  No values are printed back; nothing reaches the chat.")
     print("  Press Enter on any prompt to skip / keep current.")
     print("=" * 60)
