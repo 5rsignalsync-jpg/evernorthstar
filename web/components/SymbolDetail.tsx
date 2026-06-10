@@ -9,7 +9,12 @@ import {
   LineSeries,
   type UTCTimestamp,
 } from "lightweight-charts";
-import { fetchSymbolDetail, type SymbolDetail } from "@/lib/api";
+import {
+  fetchSymbolDetail,
+  fetchTickerDescription,
+  type SymbolDetail,
+  type TickerDescription,
+} from "@/lib/api";
 
 function fmtPrice(p: number): string {
   if (p < 0.01) return p.toFixed(6);
@@ -38,6 +43,7 @@ export function SymbolDetailModal({
 }) {
   const [data, setData] = useState<SymbolDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [desc, setDesc] = useState<TickerDescription | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,6 +54,19 @@ export function SymbolDetailModal({
       cancelled = true;
     };
   }, [symbol, signal]);
+
+  // Lazy-fetch a longer description from yfinance once we know what asset
+  // class this is. Skipped silently if yfinance has nothing for this ticker.
+  useEffect(() => {
+    if (!data) return;
+    let cancelled = false;
+    fetchTickerDescription(data.base, data.asset_class)
+      .then((d) => !cancelled && setDesc(d))
+      .catch(() => {}); // silent — description is decorative, not critical
+    return () => {
+      cancelled = true;
+    };
+  }, [data]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -84,12 +103,22 @@ export function SymbolDetailModal({
         <div className="mb-4">
           <h2 className="text-2xl font-semibold text-zinc-100">
             {data?.base ?? symbol}
+            {desc?.name && desc.name !== (data?.base ?? symbol) && (
+              <span className="text-sm font-normal text-zinc-400 ml-2">
+                {desc.name}
+              </span>
+            )}
           </h2>
           <p className="text-xs text-zinc-500 mt-1">
             {data
               ? `${data.asset_class.replace("_", " ")} · ${data.interval} bars · last 90 days`
               : "Loading…"}
           </p>
+          {desc?.description && (
+            <p className="text-xs text-zinc-400 mt-2 leading-relaxed max-w-3xl">
+              {desc.description}
+            </p>
+          )}
         </div>
 
         {error && (

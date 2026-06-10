@@ -158,6 +158,68 @@ export async function fetchSymbolDetail(
   return res.json();
 }
 
+// ---------------- Ticker search + external quotes ----------------
+
+export type TickerSearchResult = {
+  symbol: string;
+  base: string;
+  name: string | null;
+  asset_class: string;
+  price: number | null;
+  pct_change_24h: number | null;
+  in_universe: boolean;
+  description: string | null;
+};
+
+export type TickerDescription = {
+  symbol: string;
+  name: string | null;
+  description: string | null;
+  fetched_at: string;
+};
+
+export async function fetchTickerDescription(
+  symbol: string,
+  asset_class: string,
+): Promise<TickerDescription | null> {
+  const params = new URLSearchParams({ asset_class });
+  const res = await fetch(
+    `${BASE}/ticker/${encodeURIComponent(symbol)}/description?${params}`,
+    { cache: "no-store" },
+  );
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function searchTickers(query: string): Promise<TickerSearchResult[]> {
+  const q = query.trim();
+  if (!q) return [];
+  const params = new URLSearchParams({ q, include_external: "true" });
+  const res = await fetch(`${BASE}/search/tickers?${params}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Search failed: ${res.status}`);
+  return res.json();
+}
+
+export type ExternalQuote = {
+  symbol: string;
+  name: string | null;
+  price: number | null;
+  pct_change_24h: number | null;
+  fetched_at: string;
+  description: string | null;
+};
+
+export async function fetchExternalQuote(ticker: string): Promise<ExternalQuote | null> {
+  const res = await fetch(
+    `${BASE}/external/quote/${encodeURIComponent(ticker)}`,
+    { cache: "no-store" },
+  );
+  if (!res.ok) return null;  // 404 = ticker doesn't exist, swallow it
+  return res.json();
+}
+
 // ---------------- Smart Money ----------------
 
 export type SmartMoneyActor = {

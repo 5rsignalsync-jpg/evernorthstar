@@ -11,7 +11,18 @@ export type WatchKey = {
   symbol: string;
   asset_class: string;
   base?: string;
+  // Display name for external (off-universe) tickers fetched via yfinance.
+  // e.g. "MicroStrategy Incorporated" for MSTR. Populated by Watchlist search.
+  name?: string;
 };
+
+/** External (off-universe) tickers use asset_class "external". They have no
+ * rank/score from our signals; the Watchlist tab fetches their price live. */
+export const EXTERNAL_ASSET_CLASS = "external";
+
+export function isExternal(item: WatchKey): boolean {
+  return item.asset_class === EXTERNAL_ASSET_CLASS;
+}
 
 function readRaw(): WatchKey[] {
   if (typeof window === "undefined") return [];

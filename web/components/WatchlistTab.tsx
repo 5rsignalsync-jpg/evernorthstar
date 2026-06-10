@@ -3,17 +3,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { useWatchlist } from "@/hooks/useWatchlist";
 import {
+  fetchExternalQuote,
   fetchRankings,
   type RankingRow,
   type SleeveKey,
   SLEEVES,
 } from "@/lib/api";
+import { EXTERNAL_ASSET_CLASS } from "@/lib/watchlist";
 import { ScoreLegend } from "./ScoreLegend";
 import { StarButton } from "./StarButton";
+import { WatchlistSearch } from "./WatchlistSearch";
 
 type WatchedRow = RankingRow & {
   asset_class: string;
   sleeve_signal: string;
+  external?: boolean;
+  display_name?: string;
 };
 
 function scoreColor(score: number): string {
@@ -75,9 +80,10 @@ export function WatchlistTab({
 
     async function load() {
       try {
-        // Fetch each sleeve's rankings (top 25 to maximize chance of hit).
+        // 1) Fetch sleeve rankings for in-universe items so we can show score.
         const lookups = await Promise.all(
           neededClasses
+            .filter((ac) => ac !== EXTERNAL_ASSET_CLASS)
             .map((ac) => SLEEVE_BY_ASSET_CLASS[ac])
             .filter((s): s is SleeveKey => s !== null && s !== undefined)
             .map(async (sleeve) => {
@@ -108,13 +114,55 @@ export function WatchlistTab({
           }
         }
 
+        // 2) For external (off-universe) tickers, fetch live yfinance quotes
+        //    in parallel. These won't have score/rank — just price + 24h.
+        const externalItems = items.filter((w) => w.asset_class === EXTERNAL_ASSET_CLASS);
+        const externalQuotes = await Promise.all(
+          externalItems.map(async (w) => {
+            const ticker = w.base ?? w.symbol;
+            const q = await fetchExternalQuote(ticker);
+            return { item: w, quote: q };
+          }),
+        );
+
+        if (cancelled) return;
+
+        // Compose: matched in-universe rows + external quotes + still-missing
+        // in-universe (e.g., user starred a ticker that fell out of the top-N
+        // since they starred it).
         const matched: WatchedRow[] = items
+          .filter((w) => w.asset_class !== EXTERNAL_ASSET_CLASS)
           .map((w) => byKey.get(`${w.asset_class}::${w.symbol}`))
           .filter((r): r is WatchedRow => Boolean(r));
 
-        // Surface any watched symbols we couldn't find in current rankings.
+        const externals: WatchedRow[] = externalQuotes.map(({ item, quote }) => ({
+          symbol: item.base ?? item.symbol,
+          base: item.base ?? item.symbol,
+          score: 0,
+          rank: 9999,
+          price: quote?.price ?? null,
+          pct_change_24h: quote?.pct_change_24h ?? null,
+          components: null,
+          headline: null,
+          headline_publisher: null,
+          headline_at: null,
+          news_buzz: null,
+          news_sentiment: null,
+          negative_event: false,
+          upcoming_earnings: null,
+          days_to_earnings: null,
+          asset_class: EXTERNAL_ASSET_CLASS,
+          sleeve_signal: "external",
+          external: true,
+          display_name: item.name ?? quote?.name ?? undefined,
+        }));
+
         const missing = items
-          .filter((w) => !byKey.has(`${w.asset_class}::${w.symbol}`))
+          .filter(
+            (w) =>
+              w.asset_class !== EXTERNAL_ASSET_CLASS &&
+              !byKey.has(`${w.asset_class}::${w.symbol}`),
+          )
           .map<WatchedRow>((w) => ({
             symbol: w.symbol,
             base: w.base ?? w.symbol,
@@ -129,16 +177,13 @@ export function WatchlistTab({
             news_buzz: null,
             news_sentiment: null,
             negative_event: false,
-            // Earnings overlay only fires when this ticker shows up in a live
-            // ranking. Watchlist-only rows have no earnings context — null is
-            // the right placeholder.
             upcoming_earnings: null,
             days_to_earnings: null,
             asset_class: w.asset_class,
             sleeve_signal: "momentum_v1",
           }));
 
-        setRows([...matched, ...missing]);
+        setRows([...matched, ...externals, ...missing]);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
       }
@@ -152,27 +197,38 @@ export function WatchlistTab({
 
   if (items.length === 0) {
     return (
-      <div className="max-w-5xl mx-auto rounded-lg border border-zinc-800 bg-zinc-900/40 p-8 text-center">
-        <p className="text-2xl mb-2">☆</p>
-        <h2 className="text-lg font-medium text-zinc-200 mb-1">
-          Your watchlist is empty.
-        </h2>
-        <p className="text-sm text-zinc-500 max-w-md mx-auto">
-          Click the star next to any ticker on the other tabs to add it here.
-          The watchlist persists across sessions on this device.
-        </p>
+      <div className="max-w-5xl mx-auto space-y-4">
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4">
+          <WatchlistSearch />
+        </div>
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-8 text-center">
+          <p className="text-2xl mb-2">☆</p>
+          <h2 className="text-lg font-medium text-zinc-200 mb-1">
+            Your watchlist is empty.
+          </h2>
+          <p className="text-sm text-zinc-500 max-w-md mx-auto">
+            Search above to add any ticker — or star one from any other tab.
+            Stored locally in your browser (no account needed).
+          </p>
+        </div>
       </div>
     );
   }
 
+  const tickerCountLabel = items.length === 1 ? "1 ticker" : `${items.length} tickers`;
+
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="max-w-5xl mx-auto space-y-4">
+      <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4">
+        <WatchlistSearch />
+      </div>
+
       <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-lg font-semibold text-zinc-100">
             Your watchlist
           </h2>
-          <span className="text-xs text-zinc-500">{items.length} tickers</span>
+          <span className="text-xs text-zinc-500">{tickerCountLabel}</span>
         </div>
         <ScoreLegend kind="momentum" />
 
@@ -206,9 +262,24 @@ export function WatchlistTab({
                     base={r.base}
                   />
                 </td>
-                <td className="py-2 text-zinc-100 font-medium">{r.base}</td>
+                <td className="py-2 text-zinc-100 font-medium">
+                  {r.base}
+                  {r.display_name && (
+                    <span className="text-[10px] text-zinc-500 ml-2 font-normal">
+                      {r.display_name.length > 24
+                        ? r.display_name.slice(0, 22) + "…"
+                        : r.display_name}
+                    </span>
+                  )}
+                </td>
                 <td className="py-2 text-zinc-500 text-xs">
-                  {r.asset_class.replace("_", " ")}
+                  {r.external ? (
+                    <span title="External ticker — looked up via yfinance, not in our ranking universe">
+                      external
+                    </span>
+                  ) : (
+                    r.asset_class.replace("_", " ")
+                  )}
                 </td>
                 <td className="py-2 text-right text-zinc-300 tabular-nums">
                   ${formatPrice(r.price)}
@@ -226,7 +297,11 @@ export function WatchlistTab({
                 <td
                   className={`py-2 text-right tabular-nums font-medium ${scoreColor(r.score)}`}
                 >
-                  {r.rank === 9999 ? (
+                  {r.external ? (
+                    <span className="text-zinc-600 text-xs italic">
+                      no ranking
+                    </span>
+                  ) : r.rank === 9999 ? (
                     <span className="text-zinc-600 text-xs italic">
                       not in current top
                     </span>
@@ -252,8 +327,8 @@ export function WatchlistTab({
 
       <p className="text-[11px] text-zinc-600 mt-3 leading-relaxed">
         Watchlist is stored in your browser only — nothing is sent to the server.
-        Clearing your browser data will reset it. We&apos;ll add account-backed
-        sync once auth is wired.
+        Clearing your browser data will reset it. Account-backed sync across
+        devices is on the roadmap.
       </p>
     </div>
   );

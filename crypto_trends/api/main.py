@@ -716,3 +716,221 @@ def history(
             for ts, h, p, u, sent in news_rows
         ],
     )
+
+
+# ─── Ticker search + external (off-universe) lookup ──────────────────────
+#
+# Watchlist users want to track tickers we don't rank (e.g., MSTR, GME,
+# specific crypto not on Binance.US). These endpoints let the frontend
+# look up any ticker via yfinance and pull a live quote for display in the
+# watchlist, even when the ticker isn't in our universe.
+
+class TickerSearchResult(BaseModel):
+    symbol: str
+    base: str
+    name: str | None = None
+    asset_class: str  # one of our existing ACs, or "external" for yfinance lookups
+    price: float | None = None
+    pct_change_24h: float | None = None
+    in_universe: bool
+    description: str | None = None  # truncated to ~280 chars for search dropdown
+
+
+class ExternalQuote(BaseModel):
+    symbol: str
+    name: str | None
+    price: float | None
+    pct_change_24h: float | None
+    fetched_at: datetime
+    description: str | None = None  # full business summary (no truncation)
+
+
+class TickerDescription(BaseModel):
+    """Lazy-loaded long-form description for drilldown context."""
+    symbol: str
+    name: str | None
+    description: str | None
+    fetched_at: datetime
+
+
+# Memory cache: avoid hammering yfinance for repeated lookups within an hour.
+_yf_cache: dict[str, tuple[float, dict]] = {}
+_YF_CACHE_TTL_SEC = 3600
+
+
+def _yf_lookup(ticker: str) -> dict | None:
+    """Validate + fetch a yfinance ticker. Returns None if invalid or offline.
+
+    Cached for 1h to avoid repeated 1-2s API calls for the same ticker.
+    Returns dict with keys: name, price, pct_change_24h. None if not found.
+    """
+    import time as _t
+    ticker = ticker.strip().upper()
+    if not ticker or len(ticker) > 12:
+        return None
+    now = _t.time()
+    if ticker in _yf_cache:
+        ts, cached = _yf_cache[ticker]
+        if now - ts < _YF_CACHE_TTL_SEC:
+            return cached
+    try:
+        import yfinance as yf
+        t = yf.Ticker(ticker)
+        hist = t.history(period="5d", interval="1d", auto_adjust=False)
+        if hist.empty or len(hist) < 1:
+            return None
+        last_close = float(hist["Close"].iloc[-1])
+        pct = None
+        if len(hist) >= 2:
+            prev = float(hist["Close"].iloc[-2])
+            if prev > 0:
+                pct = (last_close / prev - 1.0) * 100.0
+        # Try to get the display name + description — info call can be slow,
+        # gated try/except. Includes longBusinessSummary for equities and a
+        # similar description field for crypto when yfinance has one.
+        name: str | None = None
+        description: str | None = None
+        try:
+            info = t.info or {}
+            name = info.get("shortName") or info.get("longName")
+            description = (
+                info.get("longBusinessSummary")
+                or info.get("shortBusinessSummary")
+                or info.get("description")
+            )
+        except Exception:
+            pass
+        result = {
+            "name": name,
+            "price": last_close,
+            "pct_change_24h": pct,
+            "description": description,
+        }
+        _yf_cache[ticker] = (now, result)
+        return result
+    except Exception:
+        return None
+
+
+@app.get("/search/tickers", response_model=list[TickerSearchResult])
+def search_tickers(
+    q: str = Query(min_length=1, max_length=20),
+    include_external: bool = True,
+) -> list[TickerSearchResult]:
+    """Find tickers matching `q`. Searches our universe first (instant),
+    then optionally falls back to yfinance for off-universe lookups."""
+    q_upper = q.strip().upper()
+    if not q_upper:
+        return []
+
+    results: list[TickerSearchResult] = []
+
+    # 1) Local universe search — fast prefix match on base symbol
+    with connect(read_only=True) as conn:
+        rows = conn.execute(
+            """
+            SELECT u.symbol, u.base, u.asset_class,
+                   o.close, o.pct_24h
+            FROM universe u
+            LEFT JOIN (
+                SELECT symbol, asset_class,
+                       LAST(close ORDER BY ts) AS close,
+                       (LAST(close ORDER BY ts) /
+                        NULLIF(FIRST(close ORDER BY ts), 0) - 1) * 100 AS pct_24h
+                FROM ohlcv
+                WHERE ts >= now() - INTERVAL '2 days'
+                GROUP BY symbol, asset_class
+            ) o ON o.symbol = u.symbol AND o.asset_class = u.asset_class
+            WHERE u.included
+              AND (upper(u.base) LIKE ? OR upper(u.symbol) LIKE ?)
+            ORDER BY u."rank"
+            LIMIT 8
+            """,
+            [f"{q_upper}%", f"{q_upper}%"],
+        ).fetchall()
+
+    seen_bases = set()
+    for sym, base, ac, price, pct in rows:
+        seen_bases.add(base.upper())
+        results.append(TickerSearchResult(
+            symbol=sym, base=base, asset_class=ac,
+            price=float(price) if price is not None else None,
+            pct_change_24h=float(pct) if pct is not None else None,
+            in_universe=True,
+        ))
+
+    # 2) External fallback — if the exact query isn't in our universe, hit yfinance
+    if include_external and q_upper not in seen_bases:
+        ext = _yf_lookup(q_upper)
+        if ext is not None:
+            full_desc = ext.get("description")
+            short_desc = None
+            if full_desc:
+                # Truncate to ~280 chars for the dropdown so the row stays compact.
+                short_desc = (
+                    full_desc[:280].rsplit(" ", 1)[0] + "…"
+                    if len(full_desc) > 280
+                    else full_desc
+                )
+            results.append(TickerSearchResult(
+                symbol=q_upper, base=q_upper, name=ext.get("name"),
+                asset_class="external",
+                price=ext.get("price"),
+                pct_change_24h=ext.get("pct_change_24h"),
+                in_universe=False,
+                description=short_desc,
+            ))
+
+    return results
+
+
+def _to_yf_symbol(base: str, asset_class: str) -> str:
+    """Map our internal universe symbols to yfinance's lookup format.
+
+    Equities: yfinance uses bare tickers (AAPL, MSFT) — same as our `base`.
+    Crypto: yfinance uses `BTC-USD` while we store `BTC` in `base`.
+    """
+    if asset_class in ("crypto", "crypto_micro"):
+        return f"{base}-USD"
+    return base
+
+
+@app.get("/ticker/{symbol}/description", response_model=TickerDescription)
+def ticker_description(
+    symbol: str,
+    asset_class: str = Query(...),
+) -> TickerDescription:
+    """Long-form description for the drilldown modal. Lazy yfinance lookup,
+    cached 1h. Works for both in-universe and external tickers — caller just
+    needs to pass the asset_class so we can map the symbol correctly."""
+    yf_sym = _to_yf_symbol(symbol, asset_class)
+    ext = _yf_lookup(yf_sym)
+    if ext is None:
+        # Return empty (not 404) — the UI will just hide the section.
+        return TickerDescription(
+            symbol=symbol, name=None, description=None,
+            fetched_at=datetime.utcnow(),
+        )
+    return TickerDescription(
+        symbol=symbol,
+        name=ext.get("name"),
+        description=ext.get("description"),
+        fetched_at=datetime.utcnow(),
+    )
+
+
+@app.get("/external/quote/{ticker}", response_model=ExternalQuote)
+def external_quote(ticker: str) -> ExternalQuote:
+    """Live yfinance quote for any ticker. Used by the Watchlist tab to show
+    prices for tickers that aren't in our universe (e.g., MSTR, GME)."""
+    ext = _yf_lookup(ticker)
+    if ext is None:
+        raise HTTPException(404, f"Ticker '{ticker}' not found on yfinance.")
+    return ExternalQuote(
+        symbol=ticker.upper(),
+        name=ext.get("name"),
+        price=ext.get("price"),
+        pct_change_24h=ext.get("pct_change_24h"),
+        fetched_at=datetime.utcnow(),
+        description=ext.get("description"),
+    )
