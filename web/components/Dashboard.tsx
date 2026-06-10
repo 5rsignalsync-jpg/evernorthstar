@@ -9,6 +9,7 @@ import {
 } from "@/lib/api";
 import { AuthMenu } from "./AuthMenu";
 import { useAuth } from "./AuthProvider";
+import { FearGreedBadge } from "./FearGreedBadge";
 import { FreshnessIndicator } from "./FreshnessIndicator";
 import { OnboardingTour } from "./OnboardingTour";
 import { RankingsTable } from "./RankingsTable";
@@ -145,7 +146,8 @@ export function Dashboard() {
               · Honest signals. Smart money. Always pointing north. ⭐
             </span>
           </div>
-          <div className="pt-1 shrink-0 flex items-center gap-4">
+          <div className="pt-1 shrink-0 flex items-center gap-3">
+            <FearGreedBadge />
             <FreshnessIndicator />
             <AuthMenu />
           </div>

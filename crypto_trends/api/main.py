@@ -201,6 +201,52 @@ def _human_age(seconds: int | None) -> str:
     return f"{seconds // 86400}d"
 
 
+class MarketMoodResponse(BaseModel):
+    """Crypto Fear & Greed Index from alternative.me. 0=Extreme Fear, 100=Extreme Greed."""
+    value: int
+    classification: str  # "Extreme Fear" | "Fear" | "Neutral" | "Greed" | "Extreme Greed"
+    fetched_at: datetime
+    source: str = "alternative.me"
+    asset_class: str = "crypto"
+
+
+# Module-level cache: alternative.me publishes once per day, so 1-hour caching is
+# generous + protects us if their API goes down briefly. Memory cache is fine —
+# even if Fly auto-stops the machine, the cache reloads on next request.
+_market_mood_cache: dict = {"data": None, "ts": 0.0}
+
+
+@app.get("/status/market_mood", response_model=MarketMoodResponse)
+def status_market_mood() -> MarketMoodResponse:
+    """Crypto Fear & Greed Index — cached 1h to avoid hammering alternative.me."""
+    import time as _t
+
+    import httpx
+
+    now = _t.time()
+    cached = _market_mood_cache["data"]
+    if cached is not None and now - _market_mood_cache["ts"] < 3600:
+        return cached  # type: ignore[return-value]
+
+    try:
+        r = httpx.get("https://api.alternative.me/fng/?limit=1", timeout=8.0)
+        r.raise_for_status()
+        item = r.json()["data"][0]
+        result = MarketMoodResponse(
+            value=int(item["value"]),
+            classification=item["value_classification"],
+            fetched_at=datetime.utcfromtimestamp(int(item["timestamp"])),
+        )
+        _market_mood_cache["data"] = result
+        _market_mood_cache["ts"] = now
+        return result
+    except Exception as e:
+        # Serve stale cache if we have one — better than erroring.
+        if cached is not None:
+            return cached  # type: ignore[return-value]
+        raise HTTPException(503, f"Market mood unavailable: {e}") from e
+
+
 @app.get("/status/freshness", response_model=FreshnessResponse)
 def status_freshness() -> FreshnessResponse:
     """Per-asset-class data staleness so the UI can flag stale prices."""
