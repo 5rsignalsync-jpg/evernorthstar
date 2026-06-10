@@ -21,6 +21,24 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      # Auto-stop machines need an HTTP request to wake them. `flyctl ssh`
+      # alone does not trigger the auto-start path, so a cold machine
+      # returns "app evernorthstar has no started VMs."
+      # Hit /health first, wait briefly for boot, then proceed.
+      - name: Wake the Fly machine
+        run: |
+          for i in 1 2 3 4 5; do
+            if curl -s -m 10 -f https://evernorthstar.fly.dev/health > /dev/null; then
+              echo "Machine awake (attempt $i)"
+              exit 0
+            fi
+            echo "Machine still cold (attempt $i), sleeping…"
+            sleep 4
+          done
+          echo "Could not wake machine after 5 attempts"
+          exit 1
+
       - name: Run refresh on Fly
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
