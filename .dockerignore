@@ -2,7 +2,10 @@
 # at runtime — saves bandwidth on `fly deploy` and shrinks layers.
 
 # Local data + generated artifacts
-data/
+# IMPORTANT: leading slash anchors to repo root — without it, the bare
+# `data/` pattern also excludes `crypto_trends/data/`, the Python package,
+# breaking imports inside the container. We hit this bug on 6/10.
+/data/
 *.duckdb
 *.duckdb.wal
 *.parquet
