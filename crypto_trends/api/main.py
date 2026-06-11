@@ -516,6 +516,14 @@ class ActorSummary(BaseModel):
     last_disclosed: str | None
 
 
+class PerformanceModel(BaseModel):
+    since: str
+    days_held: int
+    strategy_return_pct: float
+    tickers_priced: int
+    tickers_unpriced: int
+
+
 class StrategyCardModel(BaseModel):
     slug: str
     name: str
@@ -526,6 +534,7 @@ class StrategyCardModel(BaseModel):
     gated_reason: str | None
     n_positions: int
     last_activity: str | None
+    performance: PerformanceModel | None = None
 
 
 class PositionModel(BaseModel):
@@ -558,9 +567,24 @@ class StrategyDetailModel(BaseModel):
     )
 
 
+def _card_to_model(c: "strategy_sig.StrategyCard") -> StrategyCardModel:
+    """Convert internal dataclass to Pydantic model, including the nested
+    Performance which __dict__ spread can't auto-convert."""
+    perf_model = (
+        PerformanceModel(**c.performance.__dict__) if c.performance else None
+    )
+    return StrategyCardModel(
+        slug=c.slug, name=c.name, emoji=c.emoji,
+        description=c.description, caveats=list(c.caveats),
+        ready=c.ready, gated_reason=c.gated_reason,
+        n_positions=c.n_positions, last_activity=c.last_activity,
+        performance=perf_model,
+    )
+
+
 @app.get("/strategies", response_model=list[StrategyCardModel])
 def strategies_list() -> list[StrategyCardModel]:
-    return [StrategyCardModel(**c.__dict__) for c in strategy_sig.list_cards()]
+    return [_card_to_model(c) for c in strategy_sig.list_cards()]
 
 
 @app.get("/strategies/{slug}", response_model=StrategyDetailModel)
@@ -576,7 +600,7 @@ def strategy_detail(
     positions = det.positions[: tier.strategy_positions]
     activity = det.recent_activity[: tier.strategy_positions]
     return StrategyDetailModel(
-        card=StrategyCardModel(**det.card.__dict__),
+        card=_card_to_model(det.card),
         inverse=det.inverse,
         portfolio_size=det.portfolio_size,
         positions=[PositionModel(**p.__dict__) for p in positions],

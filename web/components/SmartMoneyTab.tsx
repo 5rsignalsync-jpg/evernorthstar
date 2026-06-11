@@ -223,6 +223,28 @@ function StrategyCardEl({
           Last disclosure: {card.last_activity.slice(0, 10)}
         </p>
       )}
+      {card.ready && card.performance && card.performance.tickers_priced > 0 && (
+        <p
+          className={
+            "text-[10px] mt-1 font-medium " +
+            (card.performance.strategy_return_pct >= 0
+              ? "text-emerald-400"
+              : "text-rose-400")
+          }
+          title={
+            `If you'd bought this basket on ${card.performance.since}, ` +
+            `holding for ${card.performance.days_held} days, weighted ` +
+            `return on the ${card.performance.tickers_priced} positions we can price.`
+          }
+        >
+          Since {card.performance.since}:{" "}
+          {card.performance.strategy_return_pct >= 0 ? "+" : ""}
+          {card.performance.strategy_return_pct.toFixed(2)}%
+          <span className="text-zinc-600 font-normal">
+            {" "}· {card.performance.days_held}d
+          </span>
+        </p>
+      )}
     </button>
   );
 }

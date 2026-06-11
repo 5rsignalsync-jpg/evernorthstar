@@ -310,6 +310,14 @@ export async function fetchActorBasket(actorId: string): Promise<ActorBasket> {
 
 // ---------------- Strategies (Autopilot-style curated baskets) ----------------
 
+export type StrategyPerformance = {
+  since: string;
+  days_held: number;
+  strategy_return_pct: number;
+  tickers_priced: number;
+  tickers_unpriced: number;
+};
+
 export type StrategyCard = {
   slug: string;
   name: string;
@@ -320,6 +328,7 @@ export type StrategyCard = {
   gated_reason: string | null;
   n_positions: number;
   last_activity: string | null;
+  performance: StrategyPerformance | null;
 };
 
 export type StrategyPosition = {
