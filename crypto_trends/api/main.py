@@ -390,8 +390,17 @@ def _rankings_data(
     models = [row_to_model(r) for r in rows]
     models.sort(key=lambda m: m.score, reverse=True)
 
-    longs = models[:effective_top_n]
-    shorts = [] if long_only else list(reversed(models[-effective_top_n:]))
+    # Each side is capped at floor(universe / 2) so longs and shorts are always
+    # disjoint sets — same ticker can't be both a relative outperformer AND
+    # a relative underperformer. With the Crypto sleeve only having ~26 names
+    # and Pro asking for top_n=25, naïve top-N + bottom-N would overlap on
+    # ~24 tickers. The cap ensures the worst case is the bottom-of-longs ≠
+    # top-of-shorts (one ticker each side, no shared symbols).
+    half_cap = len(models) // 2
+    per_side = min(effective_top_n, half_cap) if not long_only else effective_top_n
+
+    longs = models[:per_side]
+    shorts = [] if long_only else list(reversed(models[-per_side:])) if per_side > 0 else []
 
     upsell = None
     if effective_top_n < requested_top_n:
