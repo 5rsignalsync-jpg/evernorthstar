@@ -56,20 +56,36 @@ def _user_public(u: User) -> UserPublic:
     )
 
 
+def _is_https_request(request: Request) -> bool:
+    """Detect whether the original request came in over HTTPS.
+
+    On Fly (and most proxied hosts), TLS terminates at the edge proxy and the
+    app receives plain HTTP. So `request.url.scheme` is "http" even though the
+    user's browser used https://. We have to check the X-Forwarded-Proto
+    header that the proxy sets to know the original scheme.
+
+    Without this fix, `_set_session_cookie` would always pick the dev-mode
+    Lax+insecure path on Fly, breaking cross-site cookies entirely (the
+    actual bug we hit on 6/11).
+    """
+    if request.url.scheme == "https":
+        return True
+    fwd = request.headers.get("x-forwarded-proto", "").lower()
+    return fwd == "https"
+
+
 def _set_session_cookie(response: Response, request: Request, token: str) -> None:
     """Set the session cookie.
 
     In production (HTTPS), the frontend (Vercel) and backend (Fly) live on
     different registrable domains, which makes every auth request a cross-site
-    request. Browsers will only attach the cookie if it was set with
-    `SameSite=None; Secure`. `SameSite=Lax` (the previous default) was fine
-    for same-origin local dev but silently blocked sign-in / sign-up on the
-    deployed app.
+    request. Browsers only attach the cookie if it was set with
+    `SameSite=None; Secure`. `SameSite=Lax` blocks cross-site POSTs.
 
     In dev (HTTP), modern browsers reject `SameSite=None` without `Secure`, so
     we fall back to `Lax` to keep local dev working.
     """
-    secure = request.url.scheme == "https"
+    secure = _is_https_request(request)
     samesite: str = "none" if secure else "lax"
     response.set_cookie(
         key=settings.auth_cookie_name,
@@ -141,7 +157,7 @@ def logout(request: Request, response: Response) -> dict:
     # overwrites it. In prod the session cookie was set with SameSite=None;
     # Secure, and the Set-Cookie clear header must match those attrs or some
     # browsers (esp. Safari) ignore the clear.
-    secure = request.url.scheme == "https"
+    secure = _is_https_request(request)
     response.delete_cookie(
         settings.auth_cookie_name,
         path="/",
