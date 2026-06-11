@@ -157,31 +157,47 @@ export function WatchlistTab({
           display_name: item.name ?? quote?.name ?? undefined,
         }));
 
-        const missing = items
-          .filter(
-            (w) =>
-              w.asset_class !== EXTERNAL_ASSET_CLASS &&
-              !byKey.has(`${w.asset_class}::${w.symbol}`),
-          )
-          .map<WatchedRow>((w) => ({
-            symbol: w.symbol,
-            base: w.base ?? w.symbol,
-            score: 0,
-            rank: 9999,
-            price: null,
-            pct_change_24h: null,
-            components: null,
-            headline: null,
-            headline_publisher: null,
-            headline_at: null,
-            news_buzz: null,
-            news_sentiment: null,
-            negative_event: false,
-            upcoming_earnings: null,
-            days_to_earnings: null,
-            asset_class: w.asset_class,
-            sleeve_signal: "momentum_v1",
-          }));
+        // 3) For in-universe items that fell OUT of the current top-N (e.g.,
+        //    user starred WOD when it was #2, now it's #8 and didn't come
+        //    back in the rankings), enrich them with a live quote via the
+        //    same yfinance+CoinGecko fallback chain we use for externals.
+        //    This prevents "no price" rows in the watchlist purely because
+        //    something fell out of view in the rankings.
+        const missingItems = items.filter(
+          (w) =>
+            w.asset_class !== EXTERNAL_ASSET_CLASS &&
+            !byKey.has(`${w.asset_class}::${w.symbol}`),
+        );
+        const missingQuotes = await Promise.all(
+          missingItems.map(async (w) => {
+            const ticker = w.base ?? w.symbol;
+            const q = await fetchExternalQuote(ticker);
+            return { item: w, quote: q };
+          }),
+        );
+
+        if (cancelled) return;
+
+        const missing: WatchedRow[] = missingQuotes.map(({ item, quote }) => ({
+          symbol: item.symbol,
+          base: item.base ?? item.symbol,
+          score: 0,
+          rank: 9999,
+          price: quote?.price ?? null,
+          pct_change_24h: quote?.pct_change_24h ?? null,
+          components: null,
+          headline: null,
+          headline_publisher: null,
+          headline_at: null,
+          news_buzz: null,
+          news_sentiment: null,
+          negative_event: false,
+          upcoming_earnings: null,
+          days_to_earnings: null,
+          asset_class: item.asset_class,
+          sleeve_signal: "momentum_v1",
+          display_name: quote?.name ?? undefined,
+        }));
 
         setRows([...matched, ...externals, ...missing]);
       } catch (e) {
