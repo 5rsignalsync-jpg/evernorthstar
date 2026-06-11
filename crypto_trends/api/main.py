@@ -758,6 +758,75 @@ _yf_cache: dict[str, tuple[float, dict]] = {}
 _YF_CACHE_TTL_SEC = 3600
 
 
+# CoinGecko fallback for tickers yfinance doesn't cover (most non-Binance.US
+# alts: ZBCN, BONK on some exchanges, etc.). Free public API, no key needed.
+# Free tier: ~30 req/min — well below what a single user could hit.
+_cg_cache: dict[str, tuple[float, dict]] = {}
+_CG_BASE = "https://api.coingecko.com/api/v3"
+
+
+def _cg_lookup(ticker: str) -> dict | None:
+    """Find a crypto on CoinGecko by ticker. Returns dict with name, price,
+    pct_change_24h, description. Cached 1h."""
+    import time as _t
+    ticker = ticker.strip().upper()
+    if not ticker:
+        return None
+    now = _t.time()
+    if ticker in _cg_cache:
+        ts, cached = _cg_cache[ticker]
+        if now - ts < _YF_CACHE_TTL_SEC:
+            return cached
+    try:
+        import httpx
+        with httpx.Client(timeout=8.0) as client:
+            # 1) Search for coin by ticker to get its CoinGecko id
+            sr = client.get(f"{_CG_BASE}/search", params={"query": ticker})
+            sr.raise_for_status()
+            coins = sr.json().get("coins", [])
+            if not coins:
+                _cg_cache[ticker] = (now, {})
+                return None
+            # Prefer exact symbol match; CG search ranks them by market cap already
+            exact = next((c for c in coins if c.get("symbol", "").upper() == ticker), None)
+            best = exact or coins[0]
+            coin_id = best.get("id")
+            if not coin_id:
+                return None
+            # 2) Fetch full info — price + description in one call
+            cr = client.get(
+                f"{_CG_BASE}/coins/{coin_id}",
+                params={
+                    "localization": "false",
+                    "tickers": "false",
+                    "market_data": "true",
+                    "community_data": "false",
+                    "developer_data": "false",
+                },
+            )
+            cr.raise_for_status()
+            info = cr.json()
+            market = info.get("market_data", {}) or {}
+            price = market.get("current_price", {}).get("usd")
+            pct = market.get("price_change_percentage_24h")
+            description = (info.get("description", {}) or {}).get("en") or None
+            if description:
+                # Strip HTML tags + truncate for sanity
+                import re
+                description = re.sub(r"<[^>]+>", "", description).strip()
+            result = {
+                "name": info.get("name"),
+                "price": float(price) if price is not None else None,
+                "pct_change_24h": float(pct) if pct is not None else None,
+                "description": description,
+                "cg_id": coin_id,
+            }
+            _cg_cache[ticker] = (now, result)
+            return result
+    except Exception:
+        return None
+
+
 def _yf_lookup(ticker: str) -> dict | None:
     """Validate + fetch a yfinance ticker. Returns None if invalid or offline.
 
@@ -859,10 +928,17 @@ def search_tickers(
             in_universe=True,
         ))
 
-    # 2) External fallback — if the exact query isn't in our universe, hit yfinance
+    # 2) External fallback — yfinance first (stocks + major crypto with -USD),
+    #    then CoinGecko for everything else (DEX-only / non-Binance.US alts).
     if include_external and q_upper not in seen_bases:
         ext = _yf_lookup(q_upper)
-        if ext is not None:
+        # If yfinance returns NO price (often the case for off-yfinance alts),
+        # fall through to CoinGecko which covers 13k+ coins.
+        if ext is None or ext.get("price") is None:
+            cg = _cg_lookup(q_upper)
+            if cg is not None and cg.get("price") is not None:
+                ext = cg  # use CoinGecko's payload instead
+        if ext is not None and ext.get("price") is not None:
             full_desc = ext.get("description")
             short_desc = None
             if full_desc:
@@ -905,6 +981,12 @@ def ticker_description(
     needs to pass the asset_class so we can map the symbol correctly."""
     yf_sym = _to_yf_symbol(symbol, asset_class)
     ext = _yf_lookup(yf_sym)
+    # If yfinance returns nothing useful and it's a crypto ticker, try CG.
+    is_crypto = asset_class in ("crypto", "crypto_micro", "external")
+    if (ext is None or not ext.get("description")) and is_crypto:
+        cg = _cg_lookup(symbol)
+        if cg is not None and cg.get("description"):
+            ext = cg
     if ext is None:
         # Return empty (not 404) — the UI will just hide the section.
         return TickerDescription(
@@ -921,11 +1003,16 @@ def ticker_description(
 
 @app.get("/external/quote/{ticker}", response_model=ExternalQuote)
 def external_quote(ticker: str) -> ExternalQuote:
-    """Live yfinance quote for any ticker. Used by the Watchlist tab to show
-    prices for tickers that aren't in our universe (e.g., MSTR, GME)."""
+    """Live quote for any ticker. yfinance first (stocks + major crypto),
+    then CoinGecko fallback for off-yfinance alts. Used by the Watchlist
+    tab to refresh prices for off-universe tickers."""
     ext = _yf_lookup(ticker)
-    if ext is None:
-        raise HTTPException(404, f"Ticker '{ticker}' not found on yfinance.")
+    if ext is None or ext.get("price") is None:
+        cg = _cg_lookup(ticker)
+        if cg is not None and cg.get("price") is not None:
+            ext = cg
+    if ext is None or ext.get("price") is None:
+        raise HTTPException(404, f"Ticker '{ticker}' not found on yfinance or CoinGecko.")
     return ExternalQuote(
         symbol=ticker.upper(),
         name=ext.get("name"),
