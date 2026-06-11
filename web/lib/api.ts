@@ -47,35 +47,37 @@ export const SLEEVES: Record<
     label: "Crypto",
     assetClass: "crypto",
     signal: "momentum_v1",
-    topN: 5,
+    topN: 25,
     horizon: "Short-term · hourly bars",
   },
   crypto_micro: {
     label: "Crypto Micro",
     assetClass: "crypto_micro",
     signal: "momentum_v1",
-    topN: 5,
+    topN: 25,
     horizon: "Low-cap alts · hourly · wider spreads (60bps modeled)",
   },
   equity_large: {
     label: "Large Caps",
     assetClass: "equity_large",
     signal: "momentum_v1",
-    topN: 5,
+    topN: 25,
     horizon: "Short-term · daily bars",
   },
   equity_micro: {
     label: "Penny Stocks",
     assetClass: "equity_micro",
     signal: "momentum_v1",
-    topN: 3,
+    // 25 here matches the Pro promise on /pricing. Penny screener only yields
+    // ~12-15 candidates anyway, so this returns "all that pass the filter."
+    topN: 25,
     horizon: "Short-term · daily bars · high-spread cost",
   },
   long_term: {
     label: "Long-Term Picks",
     assetClass: "equity_large",
     signal: "long_term_v1",
-    topN: 10,
+    topN: 25,
     horizon: "Buy/hold · quality + value + momentum · monthly rebalance",
   },
 };
