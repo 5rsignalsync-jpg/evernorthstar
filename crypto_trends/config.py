@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     stripe_webhook_secret: str = ""
     stripe_price_pro_monthly: str = ""   # e.g. price_1ABC... from your Stripe dashboard
     stripe_price_pro_annual: str = ""
+    # One-time price ($99) for the limited "Founder Lifetime" tier — 100 spots.
+    # Buying this flips the user to subscription_tier='founder_lifetime' with
+    # no expiry. Counter enforced server-side at checkout time.
+    stripe_price_founder_lifetime: str = ""
+    founder_lifetime_spot_cap: int = 100
 
     # NOWPayments — get key at https://account.nowpayments.io/store/api-keys
     nowpayments_api_key: str = ""

@@ -101,7 +101,10 @@ def _seed_signals(asset_class: str = "equity_large", n: int = 10) -> None:
 
 @pytest.fixture
 def seeded_client(tmp_db, tmp_users_db) -> TestClient:
-    _seed_signals(n=10)
+    # Seed 30 tickers so the half-cap (floor(universe/2)=15) doesn't get in
+    # the way of testing top_n=10 longs + 10 shorts. The half-cap prevents
+    # longs and shorts from sharing tickers when the universe is small.
+    _seed_signals(n=30)
     return TestClient(app)
 
 

@@ -93,6 +93,87 @@ def create_checkout_session(
     return CheckoutResponse(url=sess.url, session_id=sess.id)
 
 
+class FounderCheckoutResponse(BaseModel):
+    url: str
+    session_id: str
+    spots_remaining: int
+
+
+@router.get("/billing/founder-spots")
+def founder_spots(session: Session = Depends(get_session)) -> dict:
+    """How many founder lifetime spots are left? Public — used by the
+    pricing page to show 'X of 100 spots remaining' (or hide the button
+    when sold out)."""
+    sold = session.exec(
+        select(User).where(User.subscription_tier == "founder_lifetime")
+    ).all()
+    return {
+        "sold": len(sold),
+        "cap": settings.founder_lifetime_spot_cap,
+        "remaining": max(0, settings.founder_lifetime_spot_cap - len(sold)),
+    }
+
+
+@router.post("/billing/checkout-founder", response_model=FounderCheckoutResponse)
+def create_founder_checkout(
+    user: User = Depends(require_user),
+    session: Session = Depends(get_session),
+) -> FounderCheckoutResponse:
+    """One-time $99 payment for Founder Lifetime tier (Pro forever)."""
+    if not settings.stripe_secret_key:
+        raise HTTPException(503, "Stripe is not configured on this deployment.")
+    if not settings.stripe_price_founder_lifetime:
+        raise HTTPException(
+            503,
+            "Founder Lifetime price not configured — set STRIPE_PRICE_FOUNDER_LIFETIME.",
+        )
+
+    # Hard cap enforcement.
+    sold_count = len(session.exec(
+        select(User).where(User.subscription_tier == "founder_lifetime")
+    ).all())
+    if sold_count >= settings.founder_lifetime_spot_cap:
+        raise HTTPException(
+            410,  # 410 Gone — feels right for "no longer available"
+            f"All {settings.founder_lifetime_spot_cap} founder spots have been claimed. "
+            "Subscribe to Pro monthly or annual instead.",
+        )
+
+    # Already on this tier? No reason to buy again.
+    if user.subscription_tier == "founder_lifetime":
+        raise HTTPException(
+            409,
+            "You already have Founder Lifetime — no further payment needed.",
+        )
+
+    customer_id = user.stripe_customer_id
+    base_url = settings.app_base_url.rstrip("/")
+    try:
+        sess = stripe.checkout.Session.create(
+            mode="payment",  # one-time, NOT subscription
+            line_items=[{"price": settings.stripe_price_founder_lifetime, "quantity": 1}],
+            success_url=f"{base_url}/billing/success?session_id={{CHECKOUT_SESSION_ID}}&plan=founder",
+            cancel_url=f"{base_url}/pricing?canceled=1",
+            client_reference_id=str(user.id),
+            customer=customer_id or None,
+            customer_email=user.email if not customer_id else None,
+            # The metadata is how the webhook knows to apply the lifetime tier
+            # instead of regular Pro. Without it, both buy-Pro and buy-Founder
+            # would land as the same tier change.
+            metadata={"user_id": str(user.id), "plan": "founder_lifetime"},
+            allow_promotion_codes=False,  # No promo codes on the lifetime tier
+        )
+    except stripe.StripeError as e:
+        log.exception("Founder Lifetime checkout session creation failed for user %s", user.id)
+        raise HTTPException(502, f"Stripe error: {e.user_message or str(e)}")
+
+    return FounderCheckoutResponse(
+        url=sess.url,
+        session_id=sess.id,
+        spots_remaining=settings.founder_lifetime_spot_cap - sold_count - 1,
+    )
+
+
 @router.post("/billing/portal-session", response_model=PortalResponse)
 def create_portal_session(
     user: User = Depends(require_user),
@@ -219,7 +300,20 @@ def _apply_event(session: Session, user: User, event_type: str, obj: dict) -> No
         if customer and not user.stripe_customer_id:
             user.stripe_customer_id = customer
             changed = True
-        user.subscription_tier = "pro"
+
+        # Distinguish founder-lifetime from regular Pro using the metadata we
+        # set on session creation. mode='payment' also works as a signal but
+        # metadata is explicit.
+        metadata = obj.get("metadata") or {}
+        is_founder = (
+            metadata.get("plan") == "founder_lifetime"
+            or obj.get("mode") == "payment"
+        )
+        if is_founder:
+            user.subscription_tier = "founder_lifetime"
+            user.subscription_expires_at = None  # Lifetime = no expiry
+        else:
+            user.subscription_tier = "pro"
         changed = True
 
     elif event_type in (
