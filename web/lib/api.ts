@@ -222,6 +222,159 @@ export async function fetchExternalQuote(ticker: string): Promise<ExternalQuote 
   return res.json();
 }
 
+// ---------------- AI: Ask Why ----------------
+
+export type AskWhyResponse = {
+  symbol: string;
+  explanation: string;
+  asset_class: string;
+};
+
+export type AskWhyResult =
+  | { status: "ok"; explanation: string }
+  | { status: "pending"; message: string }      // 503 — Anthropic key not configured
+  | { status: "free_tier"; message: string }    // 402 / 403 — Pro-gated
+  | { status: "thin_data"; message: string }    // 424 — not enough data
+  | { status: "error"; message: string };       // anything else
+
+export async function fetchAskWhy(
+  symbol: string,
+  assetClass: string,
+): Promise<AskWhyResult> {
+  const params = new URLSearchParams({ asset_class: assetClass });
+  const res = await fetch(
+    `${BASE}/ticker/${encodeURIComponent(symbol)}/ask_why?${params}`,
+    { cache: "no-store", credentials: "include" },
+  );
+  if (res.ok) {
+    const data: AskWhyResponse = await res.json();
+    return { status: "ok", explanation: data.explanation };
+  }
+  if (res.status === 503) {
+    return {
+      status: "pending",
+      message: "AI explanations are coming soon — feature wired up but the deployment hasn't been provisioned with an Anthropic API key yet.",
+    };
+  }
+  if (res.status === 402 || res.status === 403) {
+    return {
+      status: "free_tier",
+      message: "AI 'Ask Why' is a Pro feature. Upgrade to unlock.",
+    };
+  }
+  if (res.status === 424) {
+    return {
+      status: "thin_data",
+      message: "Not enough recent data to explain this ticker. Try a more-active name.",
+    };
+  }
+  let msg = `Ask Why failed (${res.status})`;
+  try {
+    const body = await res.json();
+    if (body?.detail) msg = String(body.detail);
+  } catch {
+    /* ignore */
+  }
+  return { status: "error", message: msg };
+}
+
+// ---------------- Alert rules ----------------
+
+export type AlertCondition =
+  | "score_above"
+  | "score_below"
+  | "price_above"
+  | "price_below";
+
+export type AlertRule = {
+  id: number;
+  symbol: string;
+  asset_class: string;
+  condition: AlertCondition;
+  threshold: number;
+  note: string | null;
+  enabled: boolean;
+  created_at: string;
+  last_triggered_at: string | null;
+};
+
+export type AlertEvent = {
+  id: number;
+  rule_id: number;
+  triggered_at: string;
+  observed_value: number;
+  email_sent: boolean;
+};
+
+export async function listAlertRules(): Promise<AlertRule[]> {
+  const res = await fetch(`${BASE}/alerts`, {
+    cache: "no-store",
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(`List alerts failed: ${res.status}`);
+  return res.json();
+}
+
+export async function createAlertRule(
+  rule: Omit<AlertRule, "id" | "created_at" | "last_triggered_at" | "enabled"> & {
+    enabled?: boolean;
+  },
+): Promise<AlertRule> {
+  const res = await fetch(`${BASE}/alerts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ enabled: true, ...rule }),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    let msg = `${res.status}`;
+    try {
+      const body = await res.json();
+      if (body?.detail) msg = String(body.detail);
+    } catch {
+      /* ignore */
+    }
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+export async function deleteAlertRule(id: number): Promise<void> {
+  const res = await fetch(`${BASE}/alerts/${id}`, {
+    method: "DELETE",
+    credentials: "include",
+    cache: "no-store",
+  });
+  if (!res.ok && res.status !== 204) {
+    throw new Error(`Delete alert failed: ${res.status}`);
+  }
+}
+
+export async function toggleAlertRule(
+  id: number,
+  enabled: boolean,
+): Promise<AlertRule> {
+  const params = new URLSearchParams({ enabled: String(enabled) });
+  const res = await fetch(`${BASE}/alerts/${id}?${params}`, {
+    method: "PATCH",
+    credentials: "include",
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Toggle alert failed: ${res.status}`);
+  return res.json();
+}
+
+export async function listAlertEvents(limit = 20): Promise<AlertEvent[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  const res = await fetch(`${BASE}/alerts/events?${params}`, {
+    cache: "no-store",
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(`List alert events failed: ${res.status}`);
+  return res.json();
+}
+
 // ---------------- Smart Money ----------------
 
 export type SmartMoneyActor = {

@@ -12,6 +12,7 @@ export type AuthUser = {
   subscription_expires_at: string | null;
   is_pro: boolean;
   is_admin: boolean;
+  daily_digest_opt_in: boolean;
 };
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
@@ -86,6 +87,33 @@ export async function fetchMe(): Promise<AuthUser | null> {
   if (!res.ok) return null;
   const data = await res.json();
   return data ?? null;
+}
+
+/**
+ * Update user preferences (currently just the daily-digest opt-in).
+ * Returns the refreshed user. Throws on auth failure or server error so
+ * the caller can revert the optimistic toggle.
+ */
+export async function updatePrefs(
+  patch: { daily_digest_opt_in?: boolean },
+): Promise<AuthUser> {
+  const res = await fetch(`${BASE}/auth/me/prefs`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    let msg = `${res.status}`;
+    try {
+      msg = extractErrorMessage(await res.json(), res.status);
+    } catch {
+      /* ignore */
+    }
+    throw new Error(msg);
+  }
+  return res.json();
 }
 
 /** Opens the Stripe Customer Portal for self-service subscription management. */

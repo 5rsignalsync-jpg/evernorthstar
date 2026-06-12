@@ -43,6 +43,7 @@ class UserPublic(BaseModel):
     subscription_expires_at: datetime | None
     is_pro: bool
     is_admin: bool
+    daily_digest_opt_in: bool = False
 
 
 def _user_public(u: User) -> UserPublic:
@@ -53,6 +54,7 @@ def _user_public(u: User) -> UserPublic:
         subscription_expires_at=u.subscription_expires_at,
         is_pro=is_pro(u),
         is_admin=u.is_admin,
+        daily_digest_opt_in=bool(getattr(u, "daily_digest_opt_in", False)),
     )
 
 
@@ -171,3 +173,29 @@ def logout(request: Request, response: Response) -> dict:
 @router.get("/me", response_model=UserPublic | None)
 def me(user: User | None = Depends(current_user)) -> UserPublic | None:
     return _user_public(user) if user else None
+
+
+class PrefsUpdate(BaseModel):
+    daily_digest_opt_in: bool | None = None
+
+
+@router.patch("/me/prefs", response_model=UserPublic)
+def update_prefs(
+    payload: PrefsUpdate,
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> UserPublic:
+    """Update user preferences. Currently just the digest opt-in.
+
+    Auth required (otherwise no user to update). We deliberately do NOT gate
+    on Pro — the digest is free; it's a top-of-funnel acquisition lever, not
+    a paid feature.
+    """
+    if user is None:
+        raise HTTPException(401, "Not authenticated")
+    if payload.daily_digest_opt_in is not None:
+        user.daily_digest_opt_in = payload.daily_digest_opt_in
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return _user_public(user)

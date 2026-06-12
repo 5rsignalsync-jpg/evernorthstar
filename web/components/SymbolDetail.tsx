@@ -10,8 +10,10 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 import {
+  fetchAskWhy,
   fetchSymbolDetail,
   fetchTickerDescription,
+  type AskWhyResult,
   type SymbolDetail,
   type TickerDescription,
 } from "@/lib/api";
@@ -44,6 +46,8 @@ export function SymbolDetailModal({
   const [data, setData] = useState<SymbolDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [desc, setDesc] = useState<TickerDescription | null>(null);
+  const [askResult, setAskResult] = useState<AskWhyResult | null>(null);
+  const [askLoading, setAskLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -147,6 +151,27 @@ export function SymbolDetailModal({
 
             <PriceChart detail={data} />
             <ScoreChart detail={data} />
+
+            <AskWhyPanel
+              symbol={data.base}
+              assetClass={data.asset_class}
+              result={askResult}
+              loading={askLoading}
+              onAsk={async () => {
+                setAskLoading(true);
+                try {
+                  const r = await fetchAskWhy(data.base, data.asset_class);
+                  setAskResult(r);
+                } catch (e) {
+                  setAskResult({
+                    status: "error",
+                    message: e instanceof Error ? e.message : String(e),
+                  });
+                } finally {
+                  setAskLoading(false);
+                }
+              }}
+            />
 
             <div className="mt-6">
               <h3 className="text-sm font-semibold text-zinc-300 mb-2">
@@ -260,6 +285,81 @@ function PriceChart({ detail }: { detail: SymbolDetail }) {
     <div>
       <div className="text-[11px] text-zinc-500 mb-1">Price</div>
       <div ref={ref} className="w-full" />
+    </div>
+  );
+}
+
+function AskWhyPanel({
+  symbol,
+  assetClass,
+  result,
+  loading,
+  onAsk,
+}: {
+  symbol: string;
+  assetClass: string;
+  result: AskWhyResult | null;
+  loading: boolean;
+  onAsk: () => void;
+}) {
+  return (
+    <div className="mt-6 rounded-md border border-zinc-800 bg-zinc-900/40 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-zinc-200">
+            🤖 Ask why {symbol} is moving
+          </h3>
+          <p className="text-[11px] text-zinc-500 mt-0.5">
+            Claude reads recent prices, headlines, and smart-money disclosures —
+            then explains it in 4-6 plain-English sentences.
+          </p>
+        </div>
+        <button
+          onClick={onAsk}
+          disabled={loading}
+          className="shrink-0 rounded-md bg-amber-600/20 border border-amber-600/40 px-3 py-1.5 text-xs text-amber-200 hover:bg-amber-600/30 disabled:opacity-50 disabled:cursor-not-allowed transition"
+          aria-label={`Ask AI why ${symbol} is moving (${assetClass})`}
+        >
+          {loading ? "Thinking…" : result?.status === "ok" ? "Re-explain" : "Ask"}
+        </button>
+      </div>
+
+      {result?.status === "ok" && (
+        <div className="mt-3 rounded bg-zinc-950/60 border border-zinc-800 p-3">
+          <p className="text-xs text-zinc-200 leading-relaxed whitespace-pre-wrap">
+            {result.explanation}
+          </p>
+          <p className="text-[10px] text-zinc-600 mt-2">
+            AI-generated · cross-check with the headlines and chart below.
+          </p>
+        </div>
+      )}
+      {result?.status === "pending" && (
+        <div className="mt-3 rounded bg-amber-950/30 border border-amber-700/40 p-3">
+          <p className="text-xs text-amber-200">{result.message}</p>
+        </div>
+      )}
+      {result?.status === "free_tier" && (
+        <div className="mt-3 rounded bg-indigo-950/30 border border-indigo-700/40 p-3">
+          <p className="text-xs text-indigo-200">{result.message}</p>
+          <a
+            href="/pricing"
+            className="inline-block mt-2 text-[11px] text-indigo-100 underline hover:text-white"
+          >
+            See plans →
+          </a>
+        </div>
+      )}
+      {result?.status === "thin_data" && (
+        <div className="mt-3 rounded bg-zinc-950/60 border border-zinc-800 p-3">
+          <p className="text-xs text-zinc-400">{result.message}</p>
+        </div>
+      )}
+      {result?.status === "error" && (
+        <div className="mt-3 rounded bg-rose-950/30 border border-rose-700/40 p-3">
+          <p className="text-xs text-rose-200">{result.message}</p>
+        </div>
+      )}
     </div>
   );
 }

@@ -27,6 +27,7 @@ from slowapi.util import get_remote_address
 from crypto_trends.auth.db import init_users_db
 from crypto_trends.auth.deps import current_user, require_pro
 from crypto_trends.auth.models import User
+from crypto_trends.alerts.routes import router as alerts_router
 from crypto_trends.auth.routes import router as auth_router
 from crypto_trends.auth.tiers import limits_for
 from crypto_trends.payments.nowpayments_routes import router as nowpayments_router
@@ -61,7 +62,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["*"],
 )
 
@@ -76,6 +77,7 @@ def _startup() -> None:
 app.include_router(auth_router)
 app.include_router(stripe_router)
 app.include_router(nowpayments_router)
+app.include_router(alerts_router)
 
 
 class RankingRow(BaseModel):
@@ -1002,6 +1004,47 @@ def _to_yf_symbol(base: str, asset_class: str) -> str:
     if asset_class in ("crypto", "crypto_micro"):
         return f"{base}-USD"
     return base
+
+
+class AskWhyResponse(BaseModel):
+    symbol: str
+    explanation: str
+    asset_class: str
+    enabled: bool = True
+
+
+@app.get("/ticker/{symbol}/ask_why", response_model=AskWhyResponse)
+def ticker_ask_why(
+    symbol: str,
+    asset_class: str = Query(...),
+    user: User = Depends(require_pro),
+) -> AskWhyResponse:
+    """Pro-tier AI explanation of WHY a ticker is moving. Gated on the
+    Anthropic API key being configured — returns 503 with a clear message
+    when AI features are disabled, so the frontend can surface 'feature
+    pending' instead of an opaque error."""
+    from crypto_trends.ai import ask_why as ask_why_module
+    from crypto_trends.ai import claude as claude_module
+
+    if not claude_module.is_enabled():
+        raise HTTPException(
+            503,
+            "AI features pending — ANTHROPIC_API_KEY not configured on this "
+            "deployment. Coming soon.",
+        )
+
+    explanation = ask_why_module.ask_why(symbol, asset_class)
+    if not explanation:
+        raise HTTPException(
+            424,  # Failed Dependency — Claude returned nothing useful
+            "Not enough recent data to explain this ticker. Try a more-active name.",
+        )
+
+    return AskWhyResponse(
+        symbol=symbol,
+        explanation=explanation,
+        asset_class=asset_class,
+    )
 
 
 @app.get("/ticker/{symbol}/description", response_model=TickerDescription)

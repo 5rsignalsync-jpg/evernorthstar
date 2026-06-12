@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { AlertsSection } from "@/components/AlertsSection";
 import { useAuth } from "@/components/AuthProvider";
-import { openBillingPortal } from "@/lib/auth";
+import { openBillingPortal, updatePrefs } from "@/lib/auth";
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
@@ -20,10 +21,25 @@ function formatDate(iso: string | null): string {
 }
 
 export default function AccountPage() {
-  const { user, loading, logout, isPro } = useAuth();
+  const { user, loading, logout, isPro, refresh } = useAuth();
   const router = useRouter();
   const [portalLoading, setPortalLoading] = useState(false);
   const [portalError, setPortalError] = useState<string | null>(null);
+  const [digestSaving, setDigestSaving] = useState(false);
+  const [digestError, setDigestError] = useState<string | null>(null);
+
+  async function onToggleDigest(next: boolean) {
+    setDigestError(null);
+    setDigestSaving(true);
+    try {
+      await updatePrefs({ daily_digest_opt_in: next });
+      await refresh();
+    } catch (e) {
+      setDigestError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDigestSaving(false);
+    }
+  }
 
   // Redirect to sign-in if not authenticated.
   useEffect(() => {
@@ -155,6 +171,54 @@ export default function AccountPage() {
           {portalError && (
             <p className="text-[11px] text-rose-300 border border-rose-700/40 bg-rose-900/20 rounded px-2 py-1.5 mt-3">
               {portalError}
+            </p>
+          )}
+        </div>
+
+        {/* Alerts */}
+        <AlertsSection isPro={isPro} />
+
+        {/* Email preferences */}
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-5 mb-4">
+          <h2 className="text-sm uppercase tracking-wider text-zinc-500 mb-3">
+            Email preferences
+          </h2>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm text-zinc-200 font-medium">
+                Daily AI digest
+              </p>
+              <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
+                A 5-bullet morning summary of overnight movers, smart-money
+                disclosures, and notable headlines — written by Claude from
+                EverNorthstar's signals. Sent ~7am ET. Unsubscribe anytime.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={user.daily_digest_opt_in}
+              disabled={digestSaving}
+              onClick={() => onToggleDigest(!user.daily_digest_opt_in)}
+              className={
+                "shrink-0 inline-flex items-center h-6 w-11 rounded-full transition " +
+                (user.daily_digest_opt_in
+                  ? "bg-emerald-500/70"
+                  : "bg-zinc-700") +
+                (digestSaving ? " opacity-50 cursor-wait" : " cursor-pointer")
+              }
+            >
+              <span
+                className={
+                  "h-5 w-5 rounded-full bg-white shadow transition-transform " +
+                  (user.daily_digest_opt_in ? "translate-x-5" : "translate-x-0.5")
+                }
+              />
+            </button>
+          </div>
+          {digestError && (
+            <p className="text-[11px] text-rose-300 border border-rose-700/40 bg-rose-900/20 rounded px-2 py-1.5 mt-3">
+              {digestError}
             </p>
           )}
         </div>

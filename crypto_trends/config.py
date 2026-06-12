@@ -55,6 +55,18 @@ class Settings(BaseSettings):
     nowpayments_api_key: str = ""
     nowpayments_ipn_secret: str = ""
 
+    # Anthropic Claude — for AI features (Ask Why drilldown, Daily Digest).
+    # Get key at console.anthropic.com. ~$5 free credit, then pay-as-you-go.
+    # When empty, AI endpoints return 503 with a useful "feature pending" msg.
+    anthropic_api_key: str = ""
+    anthropic_model: str = "claude-haiku-4-5"  # cheap, fast, good enough
+
+    # Resend — for outbound email (daily digest, alerts). Free 3k/mo.
+    # Sign up at resend.com. Alternative: Gmail App Password via SMTP, but
+    # Resend has cleaner API + better deliverability.
+    resend_api_key: str = ""
+    digest_from_email: str = "EverNorthstar <noreply@evernorthstar.app>"
+
     # Public URL for redirect/return after payment (set in prod to your domain)
     app_base_url: str = "http://localhost:3000"
 

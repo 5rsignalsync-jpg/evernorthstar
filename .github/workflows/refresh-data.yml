@@ -45,3 +45,13 @@ jobs:
         run: |
           flyctl ssh console -a evernorthstar \
             -C "python -m scripts.refresh_all --skip-news"
+
+      # Alerts run immediately after the refresh so triggers fire against
+      # the fresh data, not the previous hour's data. The script has a 6h
+      # cooldown so even though it runs hourly, no user can be spammed.
+      - name: Scan + dispatch alerts
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          flyctl ssh console -a evernorthstar \
+            -C "python -m scripts.run_alerts"
