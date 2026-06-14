@@ -278,6 +278,121 @@ export async function fetchAskWhy(
   return { status: "error", message: msg };
 }
 
+// ---------------- Portfolio (Plaid brokerage sync) ----------------
+
+export type BrokerageAccount = {
+  id: number;
+  institution_name: string;
+  status: string;
+  last_synced_at: string | null;
+  last_error: string | null;
+  created_at: string;
+};
+
+export type AnnotatedHolding = {
+  ticker: string | null;
+  name: string;
+  security_type: string | null;
+  quantity: number;
+  value: number | null;
+  cost_basis: number | null;
+  institution_name: string;
+  momentum_score: number | null;
+  asset_class: string | null;
+  smart_money_actors: string[];
+  smart_money_buys_usd: number;
+  smart_money_sells_usd: number;
+};
+
+export type PortfolioSummary = {
+  total_value_usd: number;
+  n_holdings: number;
+  n_with_signal: number;
+  n_with_smart_money: number;
+  weighted_momentum_score: number | null;
+  smart_money_overlap_pct: number;
+  momentum_quality_label: "strong" | "mixed" | "weak" | "unscored";
+};
+
+export type PortfolioResponse = {
+  summary: PortfolioSummary;
+  holdings: AnnotatedHolding[];
+  accounts: BrokerageAccount[];
+  plaid_enabled: boolean;
+};
+
+export async function fetchPortfolio(): Promise<PortfolioResponse> {
+  const res = await fetch(`${BASE}/portfolio`, {
+    cache: "no-store",
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(`Portfolio fetch failed: ${res.status}`);
+  return res.json();
+}
+
+export async function createPlaidLinkToken(): Promise<{ link_token: string; env: string }> {
+  const res = await fetch(`${BASE}/portfolio/link-token`, {
+    method: "POST",
+    credentials: "include",
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    let msg = `${res.status}`;
+    try {
+      const body = await res.json();
+      if (body?.detail) msg = String(body.detail);
+    } catch {
+      /* ignore */
+    }
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+export async function exchangePlaidPublicToken(
+  publicToken: string,
+): Promise<BrokerageAccount> {
+  const res = await fetch(`${BASE}/portfolio/exchange-token`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ public_token: publicToken }),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    let msg = `${res.status}`;
+    try {
+      const body = await res.json();
+      if (body?.detail) msg = String(body.detail);
+    } catch {
+      /* ignore */
+    }
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+export async function disconnectBrokerage(accountId: number): Promise<void> {
+  const res = await fetch(`${BASE}/portfolio/accounts/${accountId}`, {
+    method: "DELETE",
+    credentials: "include",
+    cache: "no-store",
+  });
+  if (!res.ok && res.status !== 204) {
+    throw new Error(`Disconnect failed: ${res.status}`);
+  }
+}
+
+export async function syncBrokerage(accountId: number): Promise<BrokerageAccount> {
+  const res = await fetch(`${BASE}/portfolio/sync/${accountId}`, {
+    method: "POST",
+    credentials: "include",
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Sync failed: ${res.status}`);
+  return res.json();
+}
+
 // ---------------- Alert rules ----------------
 
 export type AlertCondition =

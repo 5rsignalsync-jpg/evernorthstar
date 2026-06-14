@@ -1,0 +1,46 @@
+# Daily brokerage holdings sync — runs scripts/sync_portfolios.py inside the
+# live Fly machine.
+#
+# Plaid holdings update T+1 (after the brokerage reports them), so an hourly
+# sync would waste API calls. Daily at ~13:00 UTC (~9am ET) catches yesterday's
+# closing positions before the user opens the app for the day.
+#
+# Requires Fly secrets: PLAID_CLIENT_ID, PLAID_SECRET. Without them, the
+# script exits 0 with a clear log line. Requires repo secret FLY_API_TOKEN.
+
+name: Daily portfolio sync
+
+on:
+  schedule:
+    - cron: '0 13 * * *'   # 13:00 UTC = 9am ET / 8am ET DST
+  workflow_dispatch:
+
+jobs:
+  sync:
+    name: Sync brokerage holdings
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Wake the Fly machine
+        run: |
+          for i in 1 2 3 4 5; do
+            if curl -s -m 10 -f https://evernorthstar.fly.dev/health > /dev/null; then
+              echo "Machine awake (attempt $i)"
+              exit 0
+            fi
+            echo "Machine still cold (attempt $i), sleeping…"
+            sleep 4
+          done
+          echo "Could not wake machine after 5 attempts"
+          exit 1
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: Run portfolio sync on Fly
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          flyctl ssh console -a evernorthstar --command \
+            "/usr/local/bin/python -m scripts.sync_portfolios"

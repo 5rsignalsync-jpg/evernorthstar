@@ -67,6 +67,21 @@ class Settings(BaseSettings):
     resend_api_key: str = ""
     digest_from_email: str = "EverNorthstar <noreply@evernorthstar.app>"
 
+    # Plaid — brokerage connectivity for portfolio sync (Phase 2A).
+    # Get keys at dashboard.plaid.com after signup. plaid_env values:
+    #   'sandbox'    — fake data, unlimited links, free, no account needed
+    #   'development' — REAL bank data, up to 100 connected accounts, free
+    #   'production'  — REAL bank data, unlimited, $500/mo+ minimum
+    # Default sandbox lets us code + test before user provisions credentials.
+    plaid_client_id: str = ""
+    plaid_secret: str = ""
+    plaid_env: str = "sandbox"
+    # Products requested at link time. 'investments' is required for holdings;
+    # we don't ask for 'transactions' to keep the OAuth scope minimal.
+    plaid_products: str = "investments"
+    # Country codes Plaid uses to filter institutions in the Link modal.
+    plaid_country_codes: str = "US,CA"
+
     # Public URL for redirect/return after payment (set in prod to your domain)
     app_base_url: str = "http://localhost:3000"
 

@@ -31,6 +31,13 @@ export function AuthMenu() {
 
   return (
     <div className="flex items-center gap-3 text-sm">
+      <Link
+        href="/portfolio"
+        className="text-zinc-400 hover:text-zinc-100 text-xs hidden sm:inline"
+        title={isPro ? "View your portfolio" : "Pro feature — connect a brokerage"}
+      >
+        Portfolio
+      </Link>
       {isPro ? (
         <span className="text-[10px] px-1.5 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 uppercase tracking-wider">
           Pro

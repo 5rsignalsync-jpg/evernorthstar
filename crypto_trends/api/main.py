@@ -32,6 +32,7 @@ from crypto_trends.auth.routes import router as auth_router
 from crypto_trends.auth.tiers import limits_for
 from crypto_trends.payments.nowpayments_routes import router as nowpayments_router
 from crypto_trends.payments.stripe_routes import router as stripe_router
+from crypto_trends.portfolio.routes import router as portfolio_router
 from crypto_trends.config import settings
 from crypto_trends.data.ingest.earnings import upcoming_by_symbol
 from crypto_trends.data.store import connect
@@ -78,6 +79,7 @@ app.include_router(auth_router)
 app.include_router(stripe_router)
 app.include_router(nowpayments_router)
 app.include_router(alerts_router)
+app.include_router(portfolio_router)
 
 
 class RankingRow(BaseModel):

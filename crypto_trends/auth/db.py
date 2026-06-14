@@ -13,6 +13,7 @@ from collections.abc import Iterator
 from sqlmodel import Session, SQLModel, create_engine
 
 from crypto_trends.auth import models  # noqa: F401 — register model metadata
+from crypto_trends.portfolio import models as portfolio_models  # noqa: F401 — same
 from crypto_trends.config import settings
 
 
