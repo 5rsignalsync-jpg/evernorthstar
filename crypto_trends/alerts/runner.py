@@ -21,7 +21,7 @@ from typing import Optional
 from sqlmodel import Session, select
 
 from crypto_trends.ai import email as email_mod
-from crypto_trends.auth.db import _engine
+from crypto_trends.auth import db as auth_db
 from crypto_trends.auth.models import AlertEvent, AlertRule, User
 from crypto_trends.data.store import connect
 
@@ -146,7 +146,7 @@ def run_alerts() -> dict:
     emails_sent = 0
     cooled_down = 0
 
-    with Session(_engine) as session:
+    with Session(auth_db._engine) as session:
         rules = session.exec(
             select(AlertRule).where(AlertRule.enabled == True)  # noqa: E712
         ).all()

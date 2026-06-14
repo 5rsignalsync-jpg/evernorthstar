@@ -24,7 +24,8 @@ from datetime import datetime, timedelta, timezone
 from sqlmodel import Session, select
 
 from crypto_trends.ai import claude, digest, email
-from crypto_trends.auth.db import _engine, init_users_db
+from crypto_trends.auth import db as auth_db
+from crypto_trends.auth.db import init_users_db
 from crypto_trends.auth.models import User
 
 log = logging.getLogger("send_digest")
@@ -55,7 +56,7 @@ def main() -> int:
     skipped_count = 0
     failed_count = 0
 
-    with Session(_engine) as session:
+    with Session(auth_db._engine) as session:
         # Only opted-in. Skip if recently sent (rerun protection).
         stmt = select(User).where(User.daily_digest_opt_in == True)  # noqa: E712
         users = session.exec(stmt).all()
