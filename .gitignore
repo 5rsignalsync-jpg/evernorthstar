@@ -7,8 +7,13 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 
-# Data — large + regeneratable
-data/
+# Data — large + regeneratable.
+# IMPORTANT: leading slash anchors to repo root. Without it, the bare
+# `data/` pattern ALSO ignores `crypto_trends/data/` — the Python package
+# containing schema.sql, store.py, ingest/, etc. That bug caused every
+# GitHub Actions auto-deploy to ship an image missing the data package,
+# crashing the app on import.
+/data/
 *.duckdb
 *.duckdb.wal
 *.parquet
