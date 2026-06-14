@@ -1049,6 +1049,44 @@ def ticker_ask_why(
     )
 
 
+class EarningsSummaryResponse(BaseModel):
+    symbol: str
+    summary: str
+    earnings_date: str
+    model_version: str | None = None
+    generated_at: str | None = None
+    cached: bool = False
+
+
+@app.get("/ticker/{symbol}/earnings_summary", response_model=EarningsSummaryResponse)
+def ticker_earnings_summary(
+    symbol: str,
+    user: User = Depends(require_pro),
+) -> EarningsSummaryResponse:
+    """Pro-tier AI summary of the most recent earnings event for a ticker.
+
+    Synthesizes headlines + price reaction + signal change (NOT transcript)
+    since FMP transcripts are paywalled and we prioritize free-tier data.
+    Heavy caching: same earnings event = one Claude call total, ever.
+    """
+    from crypto_trends.ai import claude as claude_module
+    from crypto_trends.ai import earnings_summary as es
+
+    if not claude_module.is_enabled():
+        raise HTTPException(
+            503,
+            "AI features pending — ANTHROPIC_API_KEY not configured. Coming soon.",
+        )
+
+    result = es.summarize_latest_earnings(symbol)
+    if not result:
+        raise HTTPException(
+            404,
+            "No recent earnings event with usable data found for this ticker.",
+        )
+    return EarningsSummaryResponse(symbol=symbol, **result)
+
+
 @app.get("/ticker/{symbol}/description", response_model=TickerDescription)
 def ticker_description(
     symbol: str,

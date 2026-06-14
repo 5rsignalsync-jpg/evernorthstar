@@ -222,6 +222,53 @@ export async function fetchExternalQuote(ticker: string): Promise<ExternalQuote 
   return res.json();
 }
 
+// ---------------- AI: Earnings summary ----------------
+
+export type EarningsSummaryResult =
+  | {
+      status: "ok";
+      summary: string;
+      earnings_date: string;
+      cached: boolean;
+      model_version: string | null;
+    }
+  | { status: "pending"; message: string }
+  | { status: "free_tier"; message: string }
+  | { status: "no_data"; message: string }
+  | { status: "error"; message: string };
+
+export async function fetchEarningsSummary(
+  symbol: string,
+): Promise<EarningsSummaryResult> {
+  const res = await fetch(
+    `${BASE}/ticker/${encodeURIComponent(symbol)}/earnings_summary`,
+    { cache: "no-store", credentials: "include" },
+  );
+  if (res.ok) {
+    const data = await res.json();
+    return {
+      status: "ok",
+      summary: data.summary,
+      earnings_date: data.earnings_date,
+      cached: !!data.cached,
+      model_version: data.model_version ?? null,
+    };
+  }
+  if (res.status === 503) {
+    return { status: "pending", message: "AI earnings summaries coming soon." };
+  }
+  if (res.status === 402 || res.status === 403) {
+    return { status: "free_tier", message: "Earnings AI is a Pro feature." };
+  }
+  if (res.status === 404) {
+    return {
+      status: "no_data",
+      message: "No recent earnings event with usable data found for this ticker.",
+    };
+  }
+  return { status: "error", message: `Earnings summary failed (${res.status})` };
+}
+
 // ---------------- AI: Ask Why ----------------
 
 export type AskWhyResponse = {

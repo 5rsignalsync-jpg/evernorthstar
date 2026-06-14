@@ -11,9 +11,11 @@ import {
 } from "lightweight-charts";
 import {
   fetchAskWhy,
+  fetchEarningsSummary,
   fetchSymbolDetail,
   fetchTickerDescription,
   type AskWhyResult,
+  type EarningsSummaryResult,
   type SymbolDetail,
   type TickerDescription,
 } from "@/lib/api";
@@ -48,6 +50,8 @@ export function SymbolDetailModal({
   const [desc, setDesc] = useState<TickerDescription | null>(null);
   const [askResult, setAskResult] = useState<AskWhyResult | null>(null);
   const [askLoading, setAskLoading] = useState(false);
+  const [earningsResult, setEarningsResult] = useState<EarningsSummaryResult | null>(null);
+  const [earningsLoading, setEarningsLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -169,6 +173,26 @@ export function SymbolDetailModal({
                   });
                 } finally {
                   setAskLoading(false);
+                }
+              }}
+            />
+
+            <EarningsSummaryPanel
+              symbol={data.base}
+              result={earningsResult}
+              loading={earningsLoading}
+              onAsk={async () => {
+                setEarningsLoading(true);
+                try {
+                  const r = await fetchEarningsSummary(data.base);
+                  setEarningsResult(r);
+                } catch (e) {
+                  setEarningsResult({
+                    status: "error",
+                    message: e instanceof Error ? e.message : String(e),
+                  });
+                } finally {
+                  setEarningsLoading(false);
                 }
               }}
             />
@@ -351,6 +375,88 @@ function AskWhyPanel({
         </div>
       )}
       {result?.status === "thin_data" && (
+        <div className="mt-3 rounded bg-zinc-950/60 border border-zinc-800 p-3">
+          <p className="text-xs text-zinc-400">{result.message}</p>
+        </div>
+      )}
+      {result?.status === "error" && (
+        <div className="mt-3 rounded bg-rose-950/30 border border-rose-700/40 p-3">
+          <p className="text-xs text-rose-200">{result.message}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EarningsSummaryPanel({
+  symbol,
+  result,
+  loading,
+  onAsk,
+}: {
+  symbol: string;
+  result: EarningsSummaryResult | null;
+  loading: boolean;
+  onAsk: () => void;
+}) {
+  return (
+    <div className="mt-4 rounded-md border border-zinc-800 bg-zinc-900/40 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-zinc-200">
+            📊 Earnings recap
+          </h3>
+          <p className="text-[11px] text-zinc-500 mt-0.5">
+            Claude summarizes price reaction + headlines + signal change around
+            {symbol}'s most recent earnings event.
+          </p>
+        </div>
+        <button
+          onClick={onAsk}
+          disabled={loading}
+          className="shrink-0 rounded-md bg-purple-600/20 border border-purple-600/40 px-3 py-1.5 text-xs text-purple-200 hover:bg-purple-600/30 disabled:opacity-50 disabled:cursor-not-allowed transition"
+          aria-label={`Generate earnings summary for ${symbol}`}
+        >
+          {loading
+            ? "Generating…"
+            : result?.status === "ok"
+              ? "Re-summarize"
+              : "Summarize"}
+        </button>
+      </div>
+
+      {result?.status === "ok" && (
+        <div className="mt-3 rounded bg-zinc-950/60 border border-zinc-800 p-3">
+          <p className="text-[11px] text-zinc-500 mb-2">
+            Earnings event: <span className="text-zinc-300">{result.earnings_date}</span>
+            {result.cached && (
+              <span className="ml-2 px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 text-[10px]">
+                cached
+              </span>
+            )}
+          </p>
+          <p className="text-xs text-zinc-200 leading-relaxed whitespace-pre-wrap">
+            {result.summary}
+          </p>
+        </div>
+      )}
+      {result?.status === "pending" && (
+        <div className="mt-3 rounded bg-amber-950/30 border border-amber-700/40 p-3">
+          <p className="text-xs text-amber-200">{result.message}</p>
+        </div>
+      )}
+      {result?.status === "free_tier" && (
+        <div className="mt-3 rounded bg-indigo-950/30 border border-indigo-700/40 p-3">
+          <p className="text-xs text-indigo-200">{result.message}</p>
+          <a
+            href="/pricing"
+            className="inline-block mt-2 text-[11px] text-indigo-100 underline hover:text-white"
+          >
+            See plans →
+          </a>
+        </div>
+      )}
+      {result?.status === "no_data" && (
         <div className="mt-3 rounded bg-zinc-950/60 border border-zinc-800 p-3">
           <p className="text-xs text-zinc-400">{result.message}</p>
         </div>
