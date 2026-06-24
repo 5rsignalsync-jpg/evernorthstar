@@ -351,15 +351,99 @@ export default function PricingPage() {
           )}
         </div>
 
+        {/* FAQ — addresses the questions that gate conversion */}
+        <section className="mt-12 mb-8">
+          <h2 className="text-lg font-semibold tracking-tight mb-4">
+            Common questions
+          </h2>
+          <div className="space-y-3">
+            <Faq q="Is this financial advice?">
+              No. EverNorthstar is a research and analytics tool. We surface
+              public market data + proprietary signals. We are not a
+              registered investment adviser or broker-dealer, and nothing we
+              show you is personalized advice. See our{" "}
+              <a href="/legal/disclaimer" className="text-blue-400 hover:text-blue-300 underline">
+                Financial Disclaimer
+              </a>{" "}
+              for the full disclosure.
+            </Faq>
+            <Faq q="Can you trade for me or move money in my account?">
+              No. When you connect a brokerage via Plaid, we get read-only
+              access to your positions. We can&apos;t initiate trades, withdraw
+              funds, or transfer money. Your trades stay 100% at your broker.
+            </Faq>
+            <Faq q="Do you see my brokerage password?">
+              Never. Plaid (a SOC2-compliant fintech infrastructure provider)
+              handles authentication directly with your bank. They hand us a
+              read-only access token, which we encrypt at rest with AES + HMAC.
+              We never see your username, password, or 2FA codes.
+            </Faq>
+            <Faq q="What if I&apos;m not happy?">
+              7-day money-back guarantee on your first charge, no questions
+              asked. Email{" "}
+              <a href="mailto:support@evernorthstar.app" className="text-blue-400 hover:text-blue-300 underline">
+                support@evernorthstar.app
+              </a>{" "}
+              and we refund within 5 business days. See our{" "}
+              <a href="/legal/refunds" className="text-blue-400 hover:text-blue-300 underline">
+                Refund Policy
+              </a>
+              .
+            </Faq>
+            <Faq q="What happens if I cancel?">
+              You keep Pro access until the end of the current billing period.
+              No further charges. Your account stays — you can re-subscribe
+              anytime and your watchlist, alerts, and Plaid connections all
+              come back. Cancel anytime from Account → Manage Billing.
+            </Faq>
+            <Faq q="Why &quot;Founder Lifetime&quot;? What&apos;s the catch?">
+              We&apos;re funding the build by selling 100 early backers Pro
+              access for life at $99. No catch — your account just never
+              expires. If we shut down within 24 months, you get a pro-rated
+              refund (see Refund Policy).
+            </Faq>
+          </div>
+        </section>
+
         <p className="text-xs text-zinc-500 mt-8 leading-relaxed">
           <strong className="text-zinc-400">Honest disclosures:</strong> we&apos;re
           a research dashboard, not a registered investment adviser. Backtests
           model realistic costs and we surface when signals don&apos;t work.
           Refunds within 7 days, no questions. Crypto payments are settled in
           USDC/USDT on our end — payment data is held by Stripe and NOWPayments,
-          not us. Cancel any time from your account page.
+          not us. Cancel any time from your account page. Full details:{" "}
+          <a href="/legal/terms" className="text-zinc-400 hover:text-zinc-200 underline">
+            Terms
+          </a>{" "}
+          ·{" "}
+          <a href="/legal/privacy" className="text-zinc-400 hover:text-zinc-200 underline">
+            Privacy
+          </a>{" "}
+          ·{" "}
+          <a href="/legal/refunds" className="text-zinc-400 hover:text-zinc-200 underline">
+            Refunds
+          </a>{" "}
+          ·{" "}
+          <a href="/legal/disclaimer" className="text-zinc-400 hover:text-zinc-200 underline">
+            Disclaimer
+          </a>
+          .
         </p>
       </div>
     </main>
+  );
+}
+
+function Faq({ q, children }: { q: string; children: React.ReactNode }) {
+  return (
+    <details className="group rounded-md border border-zinc-800 bg-zinc-900/40 px-4 py-3">
+      <summary className="cursor-pointer text-sm font-medium text-zinc-200 hover:text-zinc-50 select-none list-none flex items-center justify-between">
+        <span>{q}</span>
+        <span className="text-zinc-500 group-open:rotate-180 transition-transform">
+          ⌄
+        </span>
+      </summary>
+      <p className="text-xs text-zinc-400 mt-3 leading-relaxed">{children}</p>
+    </details>
   );
 }
