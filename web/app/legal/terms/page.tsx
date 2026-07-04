@@ -13,8 +13,9 @@ export default function TermsPage() {
         By creating an account at evernorthstar.app or otherwise using
         EverNorthstar (the &quot;Service&quot;), you agree to these Terms of Service
         (the &quot;Terms&quot;). If you do not agree, do not use the Service.
-        EverNorthstar is operated by 5Royals Investments LLC, an Oklahoma
-        limited liability company (&quot;we,&quot; &quot;us,&quot; or &quot;EverNorthstar&quot;).
+        EverNorthstar is operated by 5Royals Investments LLC, a Wyoming
+        limited liability company with its principal place of business in
+        Colorado (&quot;we,&quot; &quot;us,&quot; or &quot;EverNorthstar&quot;).
       </p>
 
       <h2>2. What EverNorthstar is</h2>
@@ -168,12 +169,13 @@ export default function TermsPage() {
 
       <h2>14. Governing law and disputes</h2>
       <p>
-        These Terms are governed by the laws of the State of Oklahoma, without
-        regard to its conflict-of-laws principles. Any dispute will be
-        resolved in the state or federal courts located in Oklahoma County,
-        Oklahoma, and you consent to personal jurisdiction there. You and we
-        waive any right to a jury trial. Disputes must be brought
-        individually, not as a class action.
+        These Terms are governed by the laws of the State of Wyoming (the
+        state in which 5Royals Investments LLC is organized), without regard
+        to its conflict-of-laws principles. Any dispute will be resolved in
+        the state or federal courts located in Denver County, Colorado (the
+        county of our principal place of business), and you consent to
+        personal jurisdiction there. You and we waive any right to a jury
+        trial. Disputes must be brought individually, not as a class action.
       </p>
 
       <h2>15. Contact</h2>
