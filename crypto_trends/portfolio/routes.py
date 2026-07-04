@@ -18,7 +18,7 @@ from sqlmodel import Session, select
 from crypto_trends.auth.db import get_session
 from crypto_trends.auth.deps import require_pro
 from crypto_trends.auth.models import User
-from crypto_trends.portfolio import analysis, plaid_client, sync
+from crypto_trends.portfolio import analysis, planning, plaid_client, sync
 from crypto_trends.portfolio.encryption import encrypt_token
 from crypto_trends.portfolio.models import BrokerageAccount, Holding
 
@@ -47,6 +47,7 @@ class BrokerageAccountOut(BaseModel):
 
 
 class AnnotatedHoldingOut(BaseModel):
+    id: Optional[int] = None
     ticker: Optional[str]
     name: str
     security_type: Optional[str]
@@ -260,3 +261,181 @@ def get_portfolio(
         ],
         plaid_enabled=plaid_client.is_enabled(),
     )
+
+
+# ---------------- Position planning (Sprint 1 + 2) ----------------
+
+class ZoneReadingOut(BaseModel):
+    zone: str
+    zone_confidence: float
+    rsi: Optional[float] = None
+    bb_position_sigma: Optional[float] = None
+    score_percentile: Optional[float] = None
+    volume_divergence: bool
+    accumulation_low: Optional[float] = None
+    accumulation_high: Optional[float] = None
+    distribution_low: Optional[float] = None
+    distribution_high: Optional[float] = None
+    current_price: Optional[float] = None
+
+
+class RingFenceScenarioOut(BaseModel):
+    pct_of_gain_locked: float
+    amount_to_take_usd: float
+    remaining_position_value: float
+    net_pl_if_remainder_zero_usd: float
+
+
+class HistoricalOutcomeOut(BaseModel):
+    ticker: str
+    setup_date: str
+    setup_price: float
+    fwd_30d_return_pct: Optional[float] = None
+    fwd_90d_return_pct: Optional[float] = None
+
+
+class HistoricalStatsOut(BaseModel):
+    n_setups: int
+    median_fwd_30d_return_pct: Optional[float] = None
+    median_fwd_90d_return_pct: Optional[float] = None
+    p25_fwd_30d_return_pct: Optional[float] = None
+    p75_fwd_30d_return_pct: Optional[float] = None
+    sample: list[HistoricalOutcomeOut] = []
+
+
+class PositionPlanOut(BaseModel):
+    symbol: str
+    base: str
+    asset_class: str
+    quantity: float
+    cost_basis_per_share: Optional[float] = None
+    current_price: Optional[float] = None
+    current_value: Optional[float] = None
+    unrealized_gain_usd: Optional[float] = None
+    unrealized_gain_pct: Optional[float] = None
+    zone: ZoneReadingOut
+    ring_fence_scenarios: list[RingFenceScenarioOut]
+    historical: Optional[HistoricalStatsOut] = None
+    # Legal safety marker — every planning payload must carry the same
+    # descriptive-not-prescriptive framing at the API layer.
+    disclaimer: str = (
+        "Data-descriptive planning tool. Not investment advice. Zone labels "
+        "describe technical setup only. Historical outcome distributions "
+        "reflect past behavior and do not predict future results. You are "
+        "solely responsible for any decisions you make from this data."
+    )
+
+
+def _plan_to_out(plan: planning.PositionPlan) -> PositionPlanOut:
+    zr = plan.zone
+    hist_out: Optional[HistoricalStatsOut] = None
+    if plan.historical is not None:
+        hist_out = HistoricalStatsOut(
+            n_setups=plan.historical.n_setups,
+            median_fwd_30d_return_pct=plan.historical.median_fwd_30d_return_pct,
+            median_fwd_90d_return_pct=plan.historical.median_fwd_90d_return_pct,
+            p25_fwd_30d_return_pct=plan.historical.p25_fwd_30d_return_pct,
+            p75_fwd_30d_return_pct=plan.historical.p75_fwd_30d_return_pct,
+            sample=[HistoricalOutcomeOut(**o.__dict__) for o in plan.historical.sample],
+        )
+    return PositionPlanOut(
+        symbol=plan.symbol,
+        base=plan.base,
+        asset_class=plan.asset_class,
+        quantity=plan.quantity,
+        cost_basis_per_share=plan.cost_basis_per_share,
+        current_price=plan.current_price,
+        current_value=plan.current_value,
+        unrealized_gain_usd=plan.unrealized_gain_usd,
+        unrealized_gain_pct=plan.unrealized_gain_pct,
+        zone=ZoneReadingOut(
+            zone=zr.zone,
+            zone_confidence=zr.zone_confidence,
+            rsi=zr.rsi,
+            bb_position_sigma=zr.bb_position_sigma,
+            score_percentile=zr.score_percentile,
+            volume_divergence=zr.volume_divergence,
+            accumulation_low=zr.accumulation_low,
+            accumulation_high=zr.accumulation_high,
+            distribution_low=zr.distribution_low,
+            distribution_high=zr.distribution_high,
+            current_price=zr.current_price,
+        ),
+        ring_fence_scenarios=[
+            RingFenceScenarioOut(**s.__dict__) for s in plan.ring_fence_scenarios
+        ],
+        historical=hist_out,
+    )
+
+
+@router.get("/holdings/{holding_id}/plan", response_model=PositionPlanOut)
+def get_holding_plan(
+    holding_id: int,
+    user: User = Depends(require_pro),
+    session: Session = Depends(get_session),
+) -> PositionPlanOut:
+    """Position plan for one of the user's Plaid-synced holdings.
+
+    Uses the holding's cost basis (from Plaid) to power the ring-fence
+    scenarios; combines with market-side zone + historical outcomes.
+    """
+    holding = session.get(Holding, holding_id)
+    if holding is None or holding.user_id != user.id:
+        raise HTTPException(404, "Holding not found")
+
+    # Resolve base symbol: for crypto, Plaid may hand us a bare ticker
+    # ('BTC') while our universe stores 'BTCUSDT'. Try both.
+    symbol_candidates = [holding.ticker or ""]
+    if holding.ticker and not holding.ticker.endswith("USDT"):
+        symbol_candidates.append(f"{holding.ticker}USDT")
+    plan = None
+    for sym in symbol_candidates:
+        if not sym:
+            continue
+        plan = planning.build_position_plan(
+            symbol=sym,
+            base=holding.ticker or sym,
+            asset_class=holding.security_type or "unknown",
+            quantity=holding.quantity,
+            cost_basis_per_share=(
+                holding.cost_basis / holding.quantity
+                if holding.cost_basis and holding.quantity
+                else None
+            ),
+        )
+        if plan is not None:
+            break
+    if plan is None:
+        raise HTTPException(
+            424,
+            "No price history for this ticker. Planning is currently limited to "
+            "assets in our tracked universe.",
+        )
+    return _plan_to_out(plan)
+
+
+@router.get("/plan/{symbol}", response_model=PositionPlanOut)
+def get_symbol_plan(
+    symbol: str,
+    quantity: float = 1.0,
+    cost_basis_per_share: Optional[float] = None,
+    user: User = Depends(require_pro),
+) -> PositionPlanOut:
+    """Position plan for an arbitrary symbol (not tied to a Plaid holding).
+
+    Lets Pro users explore the planning tool for tickers they don't hold
+    via Plaid, or for hypothetical positions.
+    """
+    plan = planning.build_position_plan(
+        symbol=symbol,
+        base=symbol,
+        asset_class="unknown",
+        quantity=quantity,
+        cost_basis_per_share=cost_basis_per_share,
+    )
+    if plan is None:
+        raise HTTPException(
+            424,
+            "No price history found for this symbol. Try a ticker in our tracked universe.",
+        )
+    return _plan_to_out(plan)

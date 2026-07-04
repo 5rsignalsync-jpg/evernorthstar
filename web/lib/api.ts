@@ -337,6 +337,7 @@ export type BrokerageAccount = {
 };
 
 export type AnnotatedHolding = {
+  id: number | null;
   ticker: string | null;
   name: string;
   security_type: string | null;
@@ -437,6 +438,110 @@ export async function syncBrokerage(accountId: number): Promise<BrokerageAccount
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`Sync failed: ${res.status}`);
+  return res.json();
+}
+
+// ---------------- Position planning (Sprint 1 + 2) ----------------
+
+export type ZoneName =
+  | "accumulation"
+  | "neutral"
+  | "distribution"
+  | "extreme_distribution";
+
+export type ZoneReading = {
+  zone: ZoneName;
+  zone_confidence: number;
+  rsi: number | null;
+  bb_position_sigma: number | null;
+  score_percentile: number | null;
+  volume_divergence: boolean;
+  accumulation_low: number | null;
+  accumulation_high: number | null;
+  distribution_low: number | null;
+  distribution_high: number | null;
+  current_price: number | null;
+};
+
+export type RingFenceScenario = {
+  pct_of_gain_locked: number;
+  amount_to_take_usd: number;
+  remaining_position_value: number;
+  net_pl_if_remainder_zero_usd: number;
+};
+
+export type HistoricalOutcome = {
+  ticker: string;
+  setup_date: string;
+  setup_price: number;
+  fwd_30d_return_pct: number | null;
+  fwd_90d_return_pct: number | null;
+};
+
+export type HistoricalStats = {
+  n_setups: number;
+  median_fwd_30d_return_pct: number | null;
+  median_fwd_90d_return_pct: number | null;
+  p25_fwd_30d_return_pct: number | null;
+  p75_fwd_30d_return_pct: number | null;
+  sample: HistoricalOutcome[];
+};
+
+export type PositionPlan = {
+  symbol: string;
+  base: string;
+  asset_class: string;
+  quantity: number;
+  cost_basis_per_share: number | null;
+  current_price: number | null;
+  current_value: number | null;
+  unrealized_gain_usd: number | null;
+  unrealized_gain_pct: number | null;
+  zone: ZoneReading;
+  ring_fence_scenarios: RingFenceScenario[];
+  historical: HistoricalStats | null;
+  disclaimer: string;
+};
+
+export async function fetchHoldingPlan(holdingId: number): Promise<PositionPlan> {
+  const res = await fetch(`${BASE}/portfolio/holdings/${holdingId}/plan`, {
+    cache: "no-store",
+    credentials: "include",
+  });
+  if (!res.ok) {
+    let msg = `Plan fetch failed: ${res.status}`;
+    try {
+      const body = await res.json();
+      if (body?.detail) msg = String(body.detail);
+    } catch {
+      /* ignore */
+    }
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+export async function fetchSymbolPlan(
+  symbol: string,
+  opts?: { quantity?: number; costBasisPerShare?: number },
+): Promise<PositionPlan> {
+  const params = new URLSearchParams();
+  if (opts?.quantity !== undefined) params.set("quantity", String(opts.quantity));
+  if (opts?.costBasisPerShare !== undefined)
+    params.set("cost_basis_per_share", String(opts.costBasisPerShare));
+  const q = params.toString();
+  const url = `${BASE}/portfolio/plan/${encodeURIComponent(symbol)}${q ? `?${q}` : ""}`;
+  const res = await fetch(url, { cache: "no-store", credentials: "include" });
+  if (!res.ok) {
+    let msg = `Plan fetch failed: ${res.status}`;
+    try {
+      const body = await res.json();
+      if (body?.detail) msg = String(body.detail);
+    } catch {
+      /* ignore */
+    }
+    throw new Error(msg);
+  }
   return res.json();
 }
 

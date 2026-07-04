@@ -25,6 +25,7 @@ log = logging.getLogger(__name__)
 @dataclass
 class AnnotatedHolding:
     """A user's position enriched with EverNorthstar signal data."""
+    id: Optional[int]  # Holding row id, used by /portfolio/holdings/{id}/plan
     ticker: Optional[str]
     name: str
     security_type: Optional[str]
@@ -151,6 +152,7 @@ def analyze_user_portfolio(user_id: int) -> tuple[PortfolioSummary, list[Annotat
         sells = sum(a[2] for a in sm_info if a[1].lower() == "sell")
 
         annotated.append(AnnotatedHolding(
+            id=h.id,
             ticker=h.ticker,
             name=h.name,
             security_type=h.security_type,

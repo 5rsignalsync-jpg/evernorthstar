@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { PlaidLinkButton } from "@/components/PlaidLinkButton";
+import { PlanningCard } from "@/components/PlanningCard";
 import {
   disconnectBrokerage,
   fetchPortfolio,
@@ -300,6 +301,7 @@ function Accounts({
 }
 
 function HoldingsTable({ holdings }: { holdings: AnnotatedHolding[] }) {
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   if (holdings.length === 0) {
     return (
       <p className="text-sm text-zinc-500 text-center py-8">
@@ -313,6 +315,7 @@ function HoldingsTable({ holdings }: { holdings: AnnotatedHolding[] }) {
       <table className="w-full text-sm">
         <thead className="text-[10px] uppercase tracking-wider text-zinc-500 bg-zinc-900/80">
           <tr>
+            <th className="text-left px-3 py-2 w-8"></th>
             <th className="text-left px-3 py-2">Ticker</th>
             <th className="text-left px-3 py-2">Name</th>
             <th className="text-right px-3 py-2">Value</th>
@@ -321,50 +324,72 @@ function HoldingsTable({ holdings }: { holdings: AnnotatedHolding[] }) {
           </tr>
         </thead>
         <tbody>
-          {holdings.map((h, i) => (
-            <tr
-              key={`${h.ticker ?? "x"}-${h.institution_name}-${i}`}
-              className="border-t border-zinc-800/60"
-            >
-              <td className="px-3 py-2 font-medium text-zinc-100 tabular-nums">
-                {h.ticker ?? <span className="text-zinc-600">—</span>}
-              </td>
-              <td className="px-3 py-2 text-zinc-300 max-w-[260px] truncate">
-                {h.name}
-                <span className="text-[10px] text-zinc-600 ml-2">
-                  {h.institution_name}
-                </span>
-              </td>
-              <td className="px-3 py-2 text-right tabular-nums text-zinc-200">
-                {fmtUSD(h.value)}
-              </td>
-              <td
-                className={`px-3 py-2 text-right tabular-nums ${
-                  h.momentum_score === null
-                    ? "text-zinc-600"
-                    : h.momentum_score > 0
-                      ? "text-emerald-300"
-                      : "text-rose-300"
-                }`}
-              >
-                {fmtScore(h.momentum_score)}
-              </td>
-              <td className="px-3 py-2 text-xs text-zinc-400">
-                {h.smart_money_actors.length > 0 ? (
-                  <>
-                    <span className="text-zinc-200">
-                      {h.smart_money_actors.slice(0, 2).join(", ")}
+          {holdings.map((h, i) => {
+            const isExpanded = expandedId !== null && expandedId === h.id;
+            const canPlan = h.id !== null && h.ticker !== null;
+            return (
+              <Fragment key={`hf-${h.id ?? h.ticker ?? "x"}-${i}`}>
+                <tr
+                  className={
+                    "border-t border-zinc-800/60 " +
+                    (canPlan ? "cursor-pointer hover:bg-zinc-800/30" : "")
+                  }
+                  onClick={() => {
+                    if (!canPlan) return;
+                    setExpandedId(isExpanded ? null : (h.id as number));
+                  }}
+                >
+                  <td className="px-3 py-2 text-zinc-500 text-xs">
+                    {canPlan ? (isExpanded ? "▾" : "▸") : ""}
+                  </td>
+                  <td className="px-3 py-2 font-medium text-zinc-100 tabular-nums">
+                    {h.ticker ?? <span className="text-zinc-600">—</span>}
+                  </td>
+                  <td className="px-3 py-2 text-zinc-300 max-w-[260px] truncate">
+                    {h.name}
+                    <span className="text-[10px] text-zinc-600 ml-2">
+                      {h.institution_name}
                     </span>
-                    {h.smart_money_actors.length > 2 && (
-                      <span className="text-zinc-600"> +{h.smart_money_actors.length - 2}</span>
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-zinc-200">
+                    {fmtUSD(h.value)}
+                  </td>
+                  <td
+                    className={`px-3 py-2 text-right tabular-nums ${
+                      h.momentum_score === null
+                        ? "text-zinc-600"
+                        : h.momentum_score > 0
+                          ? "text-emerald-300"
+                          : "text-rose-300"
+                    }`}
+                  >
+                    {fmtScore(h.momentum_score)}
+                  </td>
+                  <td className="px-3 py-2 text-xs text-zinc-400">
+                    {h.smart_money_actors.length > 0 ? (
+                      <>
+                        <span className="text-zinc-200">
+                          {h.smart_money_actors.slice(0, 2).join(", ")}
+                        </span>
+                        {h.smart_money_actors.length > 2 && (
+                          <span className="text-zinc-600"> +{h.smart_money_actors.length - 2}</span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-zinc-600">—</span>
                     )}
-                  </>
-                ) : (
-                  <span className="text-zinc-600">—</span>
+                  </td>
+                </tr>
+                {isExpanded && h.id !== null && (
+                  <tr>
+                    <td colSpan={6} className="px-3 py-3 bg-zinc-950/40">
+                      <PlanningCard holdingId={h.id} />
+                    </td>
+                  </tr>
                 )}
-              </td>
-            </tr>
-          ))}
+              </Fragment>
+            );
+          })}
         </tbody>
       </table>
     </div>
