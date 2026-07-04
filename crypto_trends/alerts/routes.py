@@ -19,7 +19,12 @@ from crypto_trends.auth.models import AlertEvent, AlertRule, User
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 
-ALLOWED_CONDITIONS = {"score_above", "score_below", "price_above", "price_below"}
+ALLOWED_CONDITIONS = {
+    "score_above", "score_below",
+    "price_above", "price_below",
+    "zone_target",
+}
+ALLOWED_ZONE_TARGETS = {"accumulation", "distribution", "extreme_distribution"}
 FREE_RULE_CAP = 3
 
 
@@ -27,7 +32,8 @@ class AlertRuleIn(BaseModel):
     symbol: str = Field(min_length=1, max_length=32)
     asset_class: str = Field(min_length=1, max_length=32)
     condition: str
-    threshold: float
+    threshold: float = 0.0
+    zone_target: Optional[str] = None
     note: Optional[str] = Field(default=None, max_length=200)
     enabled: bool = True
 
@@ -38,6 +44,7 @@ class AlertRuleOut(BaseModel):
     asset_class: str
     condition: str
     threshold: float
+    zone_target: Optional[str] = None
     note: Optional[str]
     enabled: bool
     created_at: datetime
@@ -59,6 +66,7 @@ def _to_out(r: AlertRule) -> AlertRuleOut:
         asset_class=r.asset_class,
         condition=r.condition,
         threshold=r.threshold,
+        zone_target=r.zone_target,
         note=r.note,
         enabled=r.enabled,
         created_at=r.created_at,
@@ -92,6 +100,14 @@ def create_rule(
             422,
             f"Invalid condition. Must be one of: {sorted(ALLOWED_CONDITIONS)}",
         )
+    # zone_target rules must specify a valid target zone
+    if payload.condition == "zone_target":
+        if not payload.zone_target or payload.zone_target not in ALLOWED_ZONE_TARGETS:
+            raise HTTPException(
+                422,
+                f"zone_target alerts require a zone_target field, one of: "
+                f"{sorted(ALLOWED_ZONE_TARGETS)}",
+            )
     # Free-tier cap (founder + pro unlimited)
     if not is_pro(user):
         existing = session.exec(
@@ -111,6 +127,7 @@ def create_rule(
         asset_class=payload.asset_class,
         condition=payload.condition,
         threshold=payload.threshold,
+        zone_target=payload.zone_target,
         note=payload.note,
         enabled=payload.enabled,
     )

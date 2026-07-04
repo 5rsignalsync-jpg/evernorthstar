@@ -39,6 +39,9 @@ class AlertRule(SQLModel, table=True):
       'score_below'  — momentum_v1 score < threshold
       'price_above'  — latest ohlcv close > threshold (absolute price)
       'price_below'  — latest ohlcv close < threshold
+      'zone_target'  — extremum zone for the symbol equals `zone_target`.
+                       In this mode `threshold` is unused; the target zone
+                       lives in the `zone_target` column.
 
     Cooldown: a rule won't re-trigger within 6h to prevent spam. Free tier
     limited to 3 active rules, Pro unlimited.
@@ -51,6 +54,10 @@ class AlertRule(SQLModel, table=True):
     asset_class: str
     condition: str          # see docstring
     threshold: float
+    # Optional target zone for the 'zone_target' condition. One of
+    # ('accumulation', 'distribution', 'extreme_distribution'). Ignored
+    # for score_* / price_* conditions.
+    zone_target: Optional[str] = None
     enabled: bool = Field(default=True, index=True)
     note: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
