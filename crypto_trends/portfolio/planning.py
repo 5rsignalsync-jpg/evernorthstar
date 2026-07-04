@@ -68,6 +68,40 @@ class HistoricalStats:
 
 
 @dataclass
+class EntryTranche:
+    """One rung of the entry ladder — an accumulation-zone limit level.
+
+    These are descriptive price levels, not orders. `pct_of_budget` is the
+    share of a planned budget suggested for this rung; `amount_usd` and
+    `quantity` are filled only when a budget is provided.
+    """
+
+    label: str                      # "starter" / "core" / "deep"
+    price: float                    # target accumulation price level
+    pct_of_budget: float            # 0.30 / 0.35 / 0.35
+    amount_usd: Optional[float]     # budget * pct, if a budget was given
+    quantity: Optional[float]       # amount_usd / price, if computable
+
+
+@dataclass
+class EntryPlan:
+    """Structured accumulation-zone entry ladder for one symbol.
+
+    `status` describes where current price sits vs. the accumulation band:
+    "in_zone" (inside the band now), "above_zone" (wait for a pullback),
+    "below_zone" (under the band floor), or "unknown". Data only — never a
+    buy instruction.
+    """
+
+    status: str
+    accumulation_low: float
+    accumulation_high: float
+    invalidation_level: float       # a defined level below the band floor
+    tranches: list[EntryTranche]
+    note: str
+
+
+@dataclass
 class PositionPlan:
     """Complete planning payload for one position."""
 
@@ -83,6 +117,7 @@ class PositionPlan:
     zone: ZoneReading
     ring_fence_scenarios: list[RingFenceScenario]
     historical: Optional[HistoricalStats]
+    entry_plan: Optional[EntryPlan]
 
 
 def compute_ring_fence_scenarios(
@@ -114,6 +149,80 @@ def compute_ring_fence_scenarios(
             net_pl_if_remainder_zero_usd=net_pl_if_zero,
         ))
     return scenarios
+
+
+# Default entry ladder: three rungs across the accumulation band, weighted
+# slightly toward the lower (better-priced) rungs.
+_ENTRY_LADDER: tuple[tuple[str, float], ...] = (
+    ("starter", 0.30),
+    ("core", 0.35),
+    ("deep", 0.35),
+)
+_INVALIDATION_BUFFER = 0.10  # invalidation sits 10% below the accumulation floor
+
+
+def compute_entry_plan(
+    accumulation_low: Optional[float],
+    accumulation_high: Optional[float],
+    current_price: Optional[float],
+    budget_usd: Optional[float] = None,
+) -> Optional[EntryPlan]:
+    """Build a 3-rung accumulation-zone entry ladder from the zone bounds.
+
+    Rungs sit at the top / middle / bottom of the accumulation band
+    (starter / core / deep). Returns None when the band is unavailable or
+    degenerate. Descriptive data only — preserves the publisher exemption
+    (no "buy" instruction, just accumulation-zone levels).
+    """
+    if (
+        accumulation_low is None
+        or accumulation_high is None
+        or accumulation_low <= 0
+        or accumulation_high <= accumulation_low
+    ):
+        return None
+
+    lo = float(accumulation_low)
+    hi = float(accumulation_high)
+    mid = (lo + hi) / 2.0
+    rung_prices = {"starter": hi, "core": mid, "deep": lo}
+
+    tranches: list[EntryTranche] = []
+    for label, pct in _ENTRY_LADDER:
+        price = rung_prices[label]
+        amount = budget_usd * pct if (budget_usd and budget_usd > 0) else None
+        qty = (amount / price) if (amount is not None and price > 0) else None
+        tranches.append(EntryTranche(
+            label=label,
+            price=price,
+            pct_of_budget=pct,
+            amount_usd=amount,
+            quantity=qty,
+        ))
+
+    invalidation = lo * (1.0 - _INVALIDATION_BUFFER)
+
+    if current_price is None:
+        status = "unknown"
+    elif current_price > hi:
+        status = "above_zone"
+    elif current_price < lo:
+        status = "below_zone"
+    else:
+        status = "in_zone"
+
+    note = (
+        "Accumulation-zone ladder from the current zone read. These are patient "
+        "limit levels, not at-market orders, and not investment advice."
+    )
+    return EntryPlan(
+        status=status,
+        accumulation_low=lo,
+        accumulation_high=hi,
+        invalidation_level=invalidation,
+        tranches=tranches,
+        note=note,
+    )
 
 
 def _load_price_and_score_history(
@@ -285,6 +394,12 @@ def build_position_plan(
     if zone_reading.zone != "neutral":
         historical = _lookup_historical_outcomes(symbol, base, zone_reading.zone)
 
+    entry_plan = compute_entry_plan(
+        accumulation_low=zone_reading.accumulation_low,
+        accumulation_high=zone_reading.accumulation_high,
+        current_price=current_price,
+    )
+
     return PositionPlan(
         symbol=symbol,
         base=base,
@@ -298,4 +413,5 @@ def build_position_plan(
         zone=zone_reading,
         ring_fence_scenarios=ring_fence,
         historical=historical,
+        entry_plan=entry_plan,
     )
