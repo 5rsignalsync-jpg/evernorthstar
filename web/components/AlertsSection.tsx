@@ -10,6 +10,7 @@ import {
   type AlertCondition,
   type AlertEvent,
   type AlertRule,
+  type ZoneTarget,
 } from "@/lib/api";
 
 const CONDITION_LABELS: Record<AlertCondition, string> = {
@@ -17,11 +18,21 @@ const CONDITION_LABELS: Record<AlertCondition, string> = {
   score_below: "Score below",
   price_above: "Price above",
   price_below: "Price below",
+  zone_target: "Enters zone",
+};
+
+const ZONE_TARGET_LABELS: Record<ZoneTarget, string> = {
+  accumulation: "Accumulation",
+  distribution: "Distribution",
+  extreme_distribution: "Extreme distribution",
 };
 
 const ASSET_CLASSES = ["equity_large", "equity_micro", "crypto", "crypto_micro"];
 
 function fmtThreshold(rule: AlertRule): string {
+  if (rule.condition === "zone_target") {
+    return rule.zone_target ? ZONE_TARGET_LABELS[rule.zone_target] : "—";
+  }
   const isPrice = rule.condition.startsWith("price_");
   return isPrice
     ? `$${rule.threshold.toFixed(2)}`
@@ -49,6 +60,7 @@ export function AlertsSection({ isPro }: { isPro: boolean }) {
   const [assetClass, setAssetClass] = useState("equity_large");
   const [condition, setCondition] = useState<AlertCondition>("score_above");
   const [threshold, setThreshold] = useState("");
+  const [zoneTarget, setZoneTarget] = useState<ZoneTarget>("distribution");
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -73,9 +85,14 @@ export function AlertsSection({ isPro }: { isPro: boolean }) {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    const t = parseFloat(threshold);
-    if (!symbol.trim() || Number.isNaN(t)) {
-      setError("Symbol and threshold are required.");
+    if (!symbol.trim()) {
+      setError("Symbol is required.");
+      return;
+    }
+    const isZone = condition === "zone_target";
+    const t = isZone ? 0 : parseFloat(threshold);
+    if (!isZone && Number.isNaN(t)) {
+      setError("Threshold is required for score/price alerts.");
       return;
     }
     setSubmitting(true);
@@ -85,6 +102,7 @@ export function AlertsSection({ isPro }: { isPro: boolean }) {
         asset_class: assetClass,
         condition,
         threshold: t,
+        zone_target: isZone ? zoneTarget : null,
         note: note.trim() || null,
       });
       setSymbol("");
@@ -193,20 +211,35 @@ export function AlertsSection({ isPro }: { isPro: boolean }) {
                 ))}
               </select>
             </label>
-            <label className="block">
-              <span className="text-[11px] text-zinc-400">
-                Threshold {condition.startsWith("score") ? "(score, -1 to +1)" : "(USD)"}
-              </span>
-              <input
-                type="number"
-                step={condition.startsWith("score") ? "0.01" : "0.01"}
-                value={threshold}
-                onChange={(e) => setThreshold(e.target.value)}
-                placeholder={condition.startsWith("score") ? "0.5" : "150"}
-                className="block w-full mt-0.5 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-blue-500 focus:outline-none"
-                required
-              />
-            </label>
+            {condition === "zone_target" ? (
+              <label className="block">
+                <span className="text-[11px] text-zinc-400">Target zone</span>
+                <select
+                  value={zoneTarget}
+                  onChange={(e) => setZoneTarget(e.target.value as ZoneTarget)}
+                  className="block w-full mt-0.5 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm text-zinc-100 focus:border-blue-500 focus:outline-none"
+                >
+                  {Object.entries(ZONE_TARGET_LABELS).map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <label className="block">
+                <span className="text-[11px] text-zinc-400">
+                  Threshold {condition.startsWith("score") ? "(score, -1 to +1)" : "(USD)"}
+                </span>
+                <input
+                  type="number"
+                  step={condition.startsWith("score") ? "0.01" : "0.01"}
+                  value={threshold}
+                  onChange={(e) => setThreshold(e.target.value)}
+                  placeholder={condition.startsWith("score") ? "0.5" : "150"}
+                  className="block w-full mt-0.5 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-blue-500 focus:outline-none"
+                  required
+                />
+              </label>
+            )}
           </div>
           <label className="block">
             <span className="text-[11px] text-zinc-400">

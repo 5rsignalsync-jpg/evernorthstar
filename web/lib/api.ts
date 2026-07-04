@@ -487,6 +487,23 @@ export type HistoricalStats = {
   sample: HistoricalOutcome[];
 };
 
+export type EntryTranche = {
+  label: string;
+  price: number;
+  pct_of_budget: number;
+  amount_usd: number | null;
+  quantity: number | null;
+};
+
+export type EntryPlan = {
+  status: "in_zone" | "above_zone" | "below_zone" | "unknown";
+  accumulation_low: number;
+  accumulation_high: number;
+  invalidation_level: number;
+  tranches: EntryTranche[];
+  note: string;
+};
+
 export type PositionPlan = {
   symbol: string;
   base: string;
@@ -499,12 +516,22 @@ export type PositionPlan = {
   unrealized_gain_pct: number | null;
   zone: ZoneReading;
   ring_fence_scenarios: RingFenceScenario[];
+  entry_plan: EntryPlan | null;
   historical: HistoricalStats | null;
+  ai_summary: string | null;
+  ai_enabled: boolean;
   disclaimer: string;
 };
 
-export async function fetchHoldingPlan(holdingId: number): Promise<PositionPlan> {
-  const res = await fetch(`${BASE}/portfolio/holdings/${holdingId}/plan`, {
+export async function fetchHoldingPlan(
+  holdingId: number,
+  opts?: { withAi?: boolean },
+): Promise<PositionPlan> {
+  const params = new URLSearchParams();
+  if (opts?.withAi) params.set("with_ai", "true");
+  const q = params.toString();
+  const url = `${BASE}/portfolio/holdings/${holdingId}/plan${q ? `?${q}` : ""}`;
+  const res = await fetch(url, {
     cache: "no-store",
     credentials: "include",
   });
@@ -523,12 +550,13 @@ export async function fetchHoldingPlan(holdingId: number): Promise<PositionPlan>
 
 export async function fetchSymbolPlan(
   symbol: string,
-  opts?: { quantity?: number; costBasisPerShare?: number },
+  opts?: { quantity?: number; costBasisPerShare?: number; withAi?: boolean },
 ): Promise<PositionPlan> {
   const params = new URLSearchParams();
   if (opts?.quantity !== undefined) params.set("quantity", String(opts.quantity));
   if (opts?.costBasisPerShare !== undefined)
     params.set("cost_basis_per_share", String(opts.costBasisPerShare));
+  if (opts?.withAi) params.set("with_ai", "true");
   const q = params.toString();
   const url = `${BASE}/portfolio/plan/${encodeURIComponent(symbol)}${q ? `?${q}` : ""}`;
   const res = await fetch(url, { cache: "no-store", credentials: "include" });
@@ -551,7 +579,10 @@ export type AlertCondition =
   | "score_above"
   | "score_below"
   | "price_above"
-  | "price_below";
+  | "price_below"
+  | "zone_target";
+
+export type ZoneTarget = "accumulation" | "distribution" | "extreme_distribution";
 
 export type AlertRule = {
   id: number;
@@ -559,6 +590,7 @@ export type AlertRule = {
   asset_class: string;
   condition: AlertCondition;
   threshold: number;
+  zone_target: ZoneTarget | null;
   note: string | null;
   enabled: boolean;
   created_at: string;

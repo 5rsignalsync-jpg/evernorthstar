@@ -180,3 +180,56 @@ def test_build_position_plan_with_history(tmp_db):
     assert plan.zone.zone in extremum.ZONES
     # Ring-fence should populate because we're in a gain
     assert len(plan.ring_fence_scenarios) == 3
+
+
+# ---------------- Entry plan (accumulation-zone ladder) ----------------
+
+def test_entry_plan_three_rungs_and_prices():
+    plan = planning.compute_entry_plan(
+        accumulation_low=100.0, accumulation_high=120.0, current_price=110.0
+    )
+    assert plan is not None
+    assert plan.status == "in_zone"
+    assert len(plan.tranches) == 3
+    starter, core, deep = plan.tranches
+    assert (starter.label, core.label, deep.label) == ("starter", "core", "deep")
+    # rungs at top / mid / bottom of the accumulation band
+    assert starter.price == pytest.approx(120.0)
+    assert core.price == pytest.approx(110.0)
+    assert deep.price == pytest.approx(100.0)
+    # allocations 30 / 35 / 35
+    assert [t.pct_of_budget for t in plan.tranches] == [0.30, 0.35, 0.35]
+    # invalidation 10% below the floor
+    assert plan.invalidation_level == pytest.approx(90.0)
+    # no budget → no dollar amounts
+    assert all(t.amount_usd is None and t.quantity is None for t in plan.tranches)
+
+
+def test_entry_plan_with_budget_splits_dollars_and_qty():
+    plan = planning.compute_entry_plan(
+        accumulation_low=100.0, accumulation_high=120.0,
+        current_price=110.0, budget_usd=1000.0,
+    )
+    assert plan is not None
+    starter, core, deep = plan.tranches
+    assert starter.amount_usd == pytest.approx(300.0)
+    assert core.amount_usd == pytest.approx(350.0)
+    assert deep.amount_usd == pytest.approx(350.0)
+    assert starter.quantity == pytest.approx(300.0 / 120.0)
+    assert deep.quantity == pytest.approx(350.0 / 100.0)
+    assert sum(t.amount_usd for t in plan.tranches) == pytest.approx(1000.0)
+
+
+def test_entry_plan_status_above_below_in_zone_unknown():
+    lo, hi = 100.0, 120.0
+    assert planning.compute_entry_plan(lo, hi, 130.0).status == "above_zone"
+    assert planning.compute_entry_plan(lo, hi, 95.0).status == "below_zone"
+    assert planning.compute_entry_plan(lo, hi, 110.0).status == "in_zone"
+    assert planning.compute_entry_plan(lo, hi, None).status == "unknown"
+
+
+def test_entry_plan_unavailable_or_degenerate_returns_none():
+    assert planning.compute_entry_plan(None, 120.0, 110.0) is None
+    assert planning.compute_entry_plan(100.0, None, 110.0) is None
+    assert planning.compute_entry_plan(120.0, 100.0, 110.0) is None  # high <= low
+    assert planning.compute_entry_plan(0.0, 120.0, 110.0) is None

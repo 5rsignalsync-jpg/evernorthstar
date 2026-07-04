@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   fetchHoldingPlan,
   fetchSymbolPlan,
@@ -75,33 +75,36 @@ export function PlanningCard({
   const [plan, setPlan] = useState<PositionPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+
+  const loadPlan = useCallback(
+    async (withAi: boolean) => {
+      const setLoadingFlag = withAi ? setAiLoading : setLoading;
+      setLoadingFlag(true);
+      setError(null);
+      try {
+        const p = holdingId
+          ? await fetchHoldingPlan(holdingId, { withAi })
+          : symbol
+            ? await fetchSymbolPlan(symbol, {
+                quantity,
+                costBasisPerShare,
+                withAi,
+              })
+            : Promise.reject(new Error("Need holdingId or symbol"));
+        setPlan(await Promise.resolve(p));
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setLoadingFlag(false);
+      }
+    },
+    [holdingId, symbol, quantity, costBasisPerShare],
+  );
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    const fetcher = holdingId
-      ? fetchHoldingPlan(holdingId)
-      : symbol
-        ? fetchSymbolPlan(symbol, {
-            quantity,
-            costBasisPerShare,
-          })
-        : Promise.reject(new Error("Need holdingId or symbol"));
-    fetcher
-      .then((p) => {
-        if (!cancelled) setPlan(p);
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [holdingId, symbol, quantity, costBasisPerShare]);
+    void loadPlan(false);
+  }, [loadPlan]);
 
   if (loading) {
     return (
@@ -256,6 +259,50 @@ export function PlanningCard({
         </div>
       )}
 
+      {/* Entry ladder */}
+      {plan.entry_plan && (
+        <div>
+          <h4 className="text-xs font-semibold text-zinc-200 uppercase tracking-wider mb-2">
+            🪜 Accumulation-zone ladder
+          </h4>
+          <p className="text-[11px] text-zinc-500 mb-2">
+            Status: <span className="text-zinc-300">{plan.entry_plan.status.replace("_", " ")}</span>{" "}
+            · Band ${plan.entry_plan.accumulation_low.toFixed(2)} .. $
+            {plan.entry_plan.accumulation_high.toFixed(2)} · Invalidation $
+            {plan.entry_plan.invalidation_level.toFixed(2)}
+          </p>
+          <div className="rounded border border-zinc-800 overflow-hidden">
+            <table className="w-full text-xs">
+              <thead className="bg-zinc-900/60 text-[10px] text-zinc-500 uppercase tracking-wider">
+                <tr>
+                  <th className="text-left px-3 py-2">Rung</th>
+                  <th className="text-right px-3 py-2">Price</th>
+                  <th className="text-right px-3 py-2">% of budget</th>
+                </tr>
+              </thead>
+              <tbody>
+                {plan.entry_plan.tranches.map((t) => (
+                  <tr key={t.label} className="border-t border-zinc-800/60">
+                    <td className="px-3 py-2 text-zinc-100 font-medium capitalize">
+                      {t.label}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-zinc-200">
+                      {fmtUSD(t.price)}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-zinc-300">
+                      {(t.pct_of_budget * 100).toFixed(0)}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[10px] text-zinc-600 leading-relaxed mt-1.5">
+            {plan.entry_plan.note}
+          </p>
+        </div>
+      )}
+
       {/* Historical outcomes */}
       {plan.historical && plan.historical.n_setups >= 3 && (
         <div>
@@ -295,6 +342,89 @@ export function PlanningCard({
               value={fmtPct(plan.historical.p75_fwd_30d_return_pct, 1)}
             />
           </div>
+
+          {plan.historical.sample.length > 0 && (
+            <details className="mt-3 text-xs">
+              <summary className="cursor-pointer text-zinc-400 hover:text-zinc-200 select-none list-none">
+                Show {plan.historical.sample.length} similar past setups ▾
+              </summary>
+              <div className="mt-2 rounded border border-zinc-800 overflow-hidden">
+                <table className="w-full text-[11px]">
+                  <thead className="bg-zinc-900/60 text-[10px] text-zinc-500 uppercase tracking-wider">
+                    <tr>
+                      <th className="text-left px-3 py-1.5">Date</th>
+                      <th className="text-right px-3 py-1.5">Setup price</th>
+                      <th className="text-right px-3 py-1.5">Fwd 30d</th>
+                      <th className="text-right px-3 py-1.5">Fwd 90d</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {plan.historical.sample.map((o) => (
+                      <tr
+                        key={o.setup_date}
+                        className="border-t border-zinc-800/60"
+                      >
+                        <td className="px-3 py-1.5 text-zinc-300">
+                          {o.setup_date}
+                        </td>
+                        <td className="px-3 py-1.5 text-right tabular-nums text-zinc-200">
+                          {fmtUSD(o.setup_price)}
+                        </td>
+                        <td
+                          className={
+                            "px-3 py-1.5 text-right tabular-nums " +
+                            ((o.fwd_30d_return_pct ?? 0) >= 0
+                              ? "text-emerald-300"
+                              : "text-rose-300")
+                          }
+                        >
+                          {fmtPct(o.fwd_30d_return_pct, 1)}
+                        </td>
+                        <td
+                          className={
+                            "px-3 py-1.5 text-right tabular-nums " +
+                            ((o.fwd_90d_return_pct ?? 0) >= 0
+                              ? "text-emerald-300"
+                              : "text-rose-300")
+                          }
+                        >
+                          {fmtPct(o.fwd_90d_return_pct, 1)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          )}
+        </div>
+      )}
+
+      {/* AI summary */}
+      {plan.ai_enabled && (
+        <div className="rounded-md border border-purple-600/40 bg-purple-500/5 p-3">
+          <div className="flex items-baseline justify-between gap-3 flex-wrap">
+            <h4 className="text-xs font-semibold text-purple-200 uppercase tracking-wider">
+              🤖 Claude read your plan
+            </h4>
+            <button
+              type="button"
+              onClick={() => void loadPlan(true)}
+              disabled={aiLoading}
+              className="text-[11px] rounded bg-purple-600/30 border border-purple-500/50 px-2.5 py-1 text-purple-100 hover:bg-purple-600/50 disabled:opacity-50"
+            >
+              {aiLoading
+                ? "Thinking…"
+                : plan.ai_summary
+                  ? "Re-summarize"
+                  : "Summarize this position"}
+            </button>
+          </div>
+          {plan.ai_summary && (
+            <p className="text-xs text-zinc-200 leading-relaxed whitespace-pre-wrap mt-3">
+              {plan.ai_summary}
+            </p>
+          )}
         </div>
       )}
 

@@ -303,6 +303,23 @@ class HistoricalStatsOut(BaseModel):
     sample: list[HistoricalOutcomeOut] = []
 
 
+class EntryTrancheOut(BaseModel):
+    label: str
+    price: float
+    pct_of_budget: float
+    amount_usd: Optional[float] = None
+    quantity: Optional[float] = None
+
+
+class EntryPlanOut(BaseModel):
+    status: str
+    accumulation_low: float
+    accumulation_high: float
+    invalidation_level: float
+    tranches: list[EntryTrancheOut]
+    note: str
+
+
 class PositionPlanOut(BaseModel):
     symbol: str
     base: str
@@ -315,7 +332,10 @@ class PositionPlanOut(BaseModel):
     unrealized_gain_pct: Optional[float] = None
     zone: ZoneReadingOut
     ring_fence_scenarios: list[RingFenceScenarioOut]
+    entry_plan: Optional[EntryPlanOut] = None
     historical: Optional[HistoricalStatsOut] = None
+    ai_summary: Optional[str] = None
+    ai_enabled: bool = False
     # Legal safety marker — every planning payload must carry the same
     # descriptive-not-prescriptive framing at the API layer.
     disclaimer: str = (
@@ -326,7 +346,9 @@ class PositionPlanOut(BaseModel):
     )
 
 
-def _plan_to_out(plan: planning.PositionPlan) -> PositionPlanOut:
+def _plan_to_out(
+    plan: planning.PositionPlan, with_ai: bool = False
+) -> PositionPlanOut:
     zr = plan.zone
     hist_out: Optional[HistoricalStatsOut] = None
     if plan.historical is not None:
@@ -338,6 +360,30 @@ def _plan_to_out(plan: planning.PositionPlan) -> PositionPlanOut:
             p75_fwd_30d_return_pct=plan.historical.p75_fwd_30d_return_pct,
             sample=[HistoricalOutcomeOut(**o.__dict__) for o in plan.historical.sample],
         )
+
+    # Lazy-import the AI module to avoid an unconditional dependency at boot.
+    from crypto_trends.ai import claude as claude_mod
+    ai_enabled = claude_mod.is_enabled()
+    ai_summary: Optional[str] = None
+    if with_ai and ai_enabled:
+        from crypto_trends.ai.position_summary import summarize_plan
+        try:
+            ai_summary = summarize_plan(plan)
+        except Exception:
+            log.exception("AI position summary failed for %s", plan.symbol)
+
+    ep = plan.entry_plan
+    entry_out: Optional[EntryPlanOut] = None
+    if ep is not None:
+        entry_out = EntryPlanOut(
+            status=ep.status,
+            accumulation_low=ep.accumulation_low,
+            accumulation_high=ep.accumulation_high,
+            invalidation_level=ep.invalidation_level,
+            tranches=[EntryTrancheOut(**t.__dict__) for t in ep.tranches],
+            note=ep.note,
+        )
+
     return PositionPlanOut(
         symbol=plan.symbol,
         base=plan.base,
@@ -364,13 +410,17 @@ def _plan_to_out(plan: planning.PositionPlan) -> PositionPlanOut:
         ring_fence_scenarios=[
             RingFenceScenarioOut(**s.__dict__) for s in plan.ring_fence_scenarios
         ],
+        entry_plan=entry_out,
         historical=hist_out,
+        ai_summary=ai_summary,
+        ai_enabled=ai_enabled,
     )
 
 
 @router.get("/holdings/{holding_id}/plan", response_model=PositionPlanOut)
 def get_holding_plan(
     holding_id: int,
+    with_ai: bool = False,
     user: User = Depends(require_pro),
     session: Session = Depends(get_session),
 ) -> PositionPlanOut:
@@ -411,7 +461,7 @@ def get_holding_plan(
             "No price history for this ticker. Planning is currently limited to "
             "assets in our tracked universe.",
         )
-    return _plan_to_out(plan)
+    return _plan_to_out(plan, with_ai=with_ai)
 
 
 @router.get("/plan/{symbol}", response_model=PositionPlanOut)
@@ -419,6 +469,7 @@ def get_symbol_plan(
     symbol: str,
     quantity: float = 1.0,
     cost_basis_per_share: Optional[float] = None,
+    with_ai: bool = False,
     user: User = Depends(require_pro),
 ) -> PositionPlanOut:
     """Position plan for an arbitrary symbol (not tied to a Plaid holding).
@@ -438,4 +489,4 @@ def get_symbol_plan(
             424,
             "No price history found for this symbol. Try a ticker in our tracked universe.",
         )
-    return _plan_to_out(plan)
+    return _plan_to_out(plan, with_ai=with_ai)

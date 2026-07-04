@@ -83,6 +83,35 @@ def _evaluate_rule(rule: AlertRule) -> Optional[float]:
         if rule.condition == "price_below" and price < rule.threshold:
             return price
         return None
+    if rule.condition == "zone_target":
+        # Zone alerts: fire when the ticker's current extremum zone matches
+        # the user-selected target. `observed_value` is the zone confidence
+        # so we still return a numeric value for the AlertEvent record.
+        if not rule.zone_target:
+            return None
+        try:
+            from crypto_trends.portfolio.planning import (
+                _load_price_and_score_history,
+            )
+            from crypto_trends.signals.extremum import compute_zone
+        except Exception as e:
+            log.warning("zone alert deps unavailable: %s", e)
+            return None
+        # Try both bare and USDT-suffixed variants for crypto tickers
+        candidates = [rule.symbol]
+        if not rule.symbol.endswith("USDT"):
+            candidates.append(f"{rule.symbol}USDT")
+        for sym in candidates:
+            close, volume, scores = _load_price_and_score_history(
+                sym, rule.symbol, days=365
+            )
+            if close.empty:
+                continue
+            reading = compute_zone(close, volume, scores)
+            if reading.zone == rule.zone_target:
+                return float(reading.zone_confidence)
+            return None
+        return None
     log.warning("unknown alert condition: %r", rule.condition)
     return None
 
@@ -94,11 +123,17 @@ def _format_email(rule: AlertRule, observed: float) -> tuple[str, str, str]:
         "score_below": "score dropped below",
         "price_above": "price crossed above",
         "price_below": "price dropped below",
+        "zone_target": "entered zone",
     }
     op = op_words.get(rule.condition, rule.condition)
     is_price = rule.condition.startswith("price_")
-    threshold_str = f"${rule.threshold:.2f}" if is_price else f"{rule.threshold:+.3f}"
-    observed_str = f"${observed:.2f}" if is_price else f"{observed:+.3f}"
+    is_zone = rule.condition == "zone_target"
+    if is_zone:
+        threshold_str = (rule.zone_target or "").replace("_", " ")
+        observed_str = f"{observed * 100:.0f}% confidence"
+    else:
+        threshold_str = f"${rule.threshold:.2f}" if is_price else f"{rule.threshold:+.3f}"
+        observed_str = f"${observed:.2f}" if is_price else f"{observed:+.3f}"
 
     subject = f"🚨 {rule.symbol} {op} {threshold_str}"
 

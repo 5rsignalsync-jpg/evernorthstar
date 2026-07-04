@@ -45,14 +45,16 @@ def init_users_db() -> None:
 def _run_lightweight_migrations() -> None:
     from sqlalchemy import text
     additions = [
-        # column, type, default — keep this list strictly additive
-        ("daily_digest_opt_in", "INTEGER NOT NULL DEFAULT 0"),
-        ("daily_digest_last_sent_at", "DATETIME"),
+        # (table, column, type/default) — strictly additive migrations
+        ("users", "daily_digest_opt_in", "INTEGER NOT NULL DEFAULT 0"),
+        ("users", "daily_digest_last_sent_at", "DATETIME"),
+        # Sprint 3: zone_target alerts on the alert_rules table
+        ("alert_rules", "zone_target", "VARCHAR"),
     ]
     with _engine.begin() as conn:
-        for col, ddl in additions:
+        for table, col, ddl in additions:
             try:
-                conn.execute(text(f"ALTER TABLE users ADD COLUMN {col} {ddl}"))
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}"))
             except Exception:
                 # already exists — fine
                 pass
