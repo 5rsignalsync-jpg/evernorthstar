@@ -17,7 +17,7 @@ from sqlmodel import Session, select
 
 from crypto_trends.auth.db import get_session
 from crypto_trends.auth.deps import require_pro
-from crypto_trends.auth.models import User
+from crypto_trends.auth.models import User, AlertRule
 from crypto_trends.portfolio import analysis, planning, plaid_client, sync
 from crypto_trends.portfolio.encryption import encrypt_token
 from crypto_trends.portfolio.models import BrokerageAccount, Holding
@@ -462,6 +462,119 @@ def get_holding_plan(
             "assets in our tracked universe.",
         )
     return _plan_to_out(plan, with_ai=with_ai)
+
+
+# ---------------- Arm plan → alerts (Sprint 3) ----------------
+
+_PLAN_ALERT_PREFIX = "PLAN:"  # marks alerts created by "arm this plan"
+
+
+class ArmedAlertOut(BaseModel):
+    condition: str
+    threshold: float
+    note: str
+
+
+class ArmPlanResponse(BaseModel):
+    symbol: str
+    armed: int
+    replaced: int
+    alerts: list[ArmedAlertOut]
+    # Same descriptive-not-prescriptive posture as the plan itself.
+    disclaimer: str = (
+        "These are price alerts at levels from your plan, not orders or advice. "
+        "You decide whether to act when one fires."
+    )
+
+
+@router.post("/holdings/{holding_id}/plan/arm", response_model=ArmPlanResponse)
+def arm_holding_plan(
+    holding_id: int,
+    user: User = Depends(require_pro),
+    session: Session = Depends(get_session),
+) -> ArmPlanResponse:
+    """Arm a holding's plan: create price alerts at every decision level —
+    each entry rung, the invalidation, and the profit-taking zone — so the
+    user is pinged at those levels instead of watching charts. Re-arming
+    replaces the plan's prior alerts for this symbol. Data-driven, not advice.
+    """
+    holding = session.get(Holding, holding_id)
+    if holding is None or holding.user_id != user.id:
+        raise HTTPException(404, "Holding not found")
+
+    symbol_candidates = [holding.ticker or ""]
+    if holding.ticker and not holding.ticker.endswith("USDT"):
+        symbol_candidates.append(f"{holding.ticker}USDT")
+    plan = None
+    for sym in symbol_candidates:
+        if not sym:
+            continue
+        plan = planning.build_position_plan(
+            symbol=sym,
+            base=holding.ticker or sym,
+            asset_class=holding.security_type or "unknown",
+            quantity=holding.quantity,
+            cost_basis_per_share=(
+                holding.cost_basis / holding.quantity
+                if holding.cost_basis and holding.quantity
+                else None
+            ),
+        )
+        if plan is not None:
+            break
+    if plan is None:
+        raise HTTPException(424, "No price history for this ticker.")
+
+    # Collect (condition, threshold, label) for every level in the plan.
+    levels: list[tuple[str, float, str]] = []
+    ep = plan.entry_plan
+    if ep is not None:
+        for t in ep.tranches:
+            levels.append(("price_below", t.price, f"entry · {t.label}"))
+        levels.append(("price_below", ep.invalidation_level, "invalidation"))
+    zr = plan.zone
+    if zr.distribution_low is not None:
+        levels.append(("price_above", zr.distribution_low, "take-profit · zone start"))
+    if zr.distribution_high is not None:
+        levels.append(("price_above", zr.distribution_high, "take-profit · zone end"))
+
+    if not levels:
+        raise HTTPException(
+            422, "This plan has no armable levels yet (needs an accumulation zone)."
+        )
+
+    symbol_up = plan.symbol.upper()
+    # Replace any prior plan-armed alerts for this symbol (idempotent re-arm).
+    prior = session.exec(
+        select(AlertRule).where(
+            (AlertRule.user_id == user.id)
+            & (AlertRule.symbol == symbol_up)
+            & (AlertRule.note.like(f"{_PLAN_ALERT_PREFIX}%"))  # type: ignore[union-attr]
+        )
+    ).all()
+    for r in prior:
+        session.delete(r)
+
+    created: list[ArmedAlertOut] = []
+    for condition, threshold, label in levels:
+        note = f"{_PLAN_ALERT_PREFIX} {label}"[:200]
+        session.add(AlertRule(
+            user_id=user.id or 0,
+            symbol=symbol_up,
+            asset_class=plan.asset_class,
+            condition=condition,
+            threshold=float(threshold),
+            zone_target=None,
+            note=note,
+            enabled=True,
+        ))
+        created.append(
+            ArmedAlertOut(condition=condition, threshold=float(threshold), note=note)
+        )
+    session.commit()
+    return ArmPlanResponse(
+        symbol=symbol_up, armed=len(created), replaced=len(prior), alerts=created
+    )
 
 
 @router.get("/plan/{symbol}", response_model=PositionPlanOut)

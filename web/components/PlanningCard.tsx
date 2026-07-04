@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  armHoldingPlan,
   fetchHoldingPlan,
   fetchSymbolPlan,
+  type ArmPlanResult,
   type PositionPlan,
   type ZoneName,
 } from "@/lib/api";
@@ -76,6 +78,22 @@ export function PlanningCard({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [arming, setArming] = useState(false);
+  const [armResult, setArmResult] = useState<ArmPlanResult | null>(null);
+  const [armError, setArmError] = useState<string | null>(null);
+
+  const handleArm = useCallback(async () => {
+    if (!holdingId) return;
+    setArming(true);
+    setArmError(null);
+    try {
+      setArmResult(await armHoldingPlan(holdingId));
+    } catch (e) {
+      setArmError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setArming(false);
+    }
+  }, [holdingId]);
 
   const loadPlan = useCallback(
     async (withAi: boolean) => {
@@ -300,6 +318,34 @@ export function PlanningCard({
           <p className="text-[10px] text-zinc-600 leading-relaxed mt-1.5">
             {plan.entry_plan.note}
           </p>
+          {holdingId && (
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => void handleArm()}
+                disabled={arming}
+                className="text-xs font-medium rounded bg-emerald-600/90 hover:bg-emerald-600 text-white px-3 py-1.5 disabled:opacity-60"
+                title="Set price alerts at every entry rung, the invalidation, and the take-profit zone"
+              >
+                {arming
+                  ? "Arming…"
+                  : armResult
+                    ? "↻ Re-arm alerts"
+                    : "🔔 Arm this plan"}
+              </button>
+              {armResult && (
+                <span className="text-[11px] text-emerald-300">
+                  ✓ Armed {armResult.armed} alert
+                  {armResult.armed === 1 ? "" : "s"}
+                  {armResult.replaced > 0
+                    ? ` (replaced ${armResult.replaced})`
+                    : ""}
+                </span>
+              )}
+              {armError && (
+                <span className="text-[11px] text-rose-300">{armError}</span>
+              )}
+            </div>
+          )}
         </div>
       )}
 

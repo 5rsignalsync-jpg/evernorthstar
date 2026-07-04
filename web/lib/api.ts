@@ -548,6 +548,40 @@ export async function fetchHoldingPlan(
   return res.json();
 }
 
+export type ArmedAlert = {
+  condition: string;
+  threshold: number;
+  note: string;
+};
+
+export type ArmPlanResult = {
+  symbol: string;
+  armed: number;
+  replaced: number;
+  alerts: ArmedAlert[];
+  disclaimer: string;
+};
+
+export async function armHoldingPlan(holdingId: number): Promise<ArmPlanResult> {
+  const url = `${BASE}/portfolio/holdings/${holdingId}/plan/arm`;
+  const res = await fetch(url, {
+    method: "POST",
+    cache: "no-store",
+    credentials: "include",
+  });
+  if (!res.ok) {
+    let msg = `Arm failed: ${res.status}`;
+    try {
+      const body = await res.json();
+      if (body?.detail) msg = String(body.detail);
+    } catch {
+      /* ignore */
+    }
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
 export async function fetchSymbolPlan(
   symbol: string,
   opts?: { quantity?: number; costBasisPerShare?: number; withAi?: boolean },
