@@ -57,11 +57,13 @@ const FEATURES = {
     "Top 3 longs / 3 shorts per ranking",
     "Top 3 positions per strategy",
     "5 watchlist tickers",
+    "3 active email alerts (score / price thresholds)",
     "Daily refresh (no real-time)",
     "Full price charts + headlines on drill-down",
     "Onboarding tour, score legends, all disclaimers",
   ],
   pro: [
+    // Existing rankings + smart-money coverage
     "All sleeves: Long-Term Picks, Penny Stocks, Smart Money",
     "Full top-25 rankings (longs + shorts)",
     "All 10 curated strategies + full position baskets",
@@ -69,7 +71,20 @@ const FEATURES = {
     "Real-time refresh + manual refresh button",
     "Earnings calendar warnings",
     "CSV export of any sleeve",
-    "Email alerts (coming soon)",
+    // AI-explained context (Sprint 1D + 2D)
+    "🤖 Ask Why: Claude explains any ticker's move in plain English",
+    "📊 Earnings recap: Claude summarizes each ticker's most recent report",
+    // Portfolio + planning (Sprint 2A + 1 + 2 + 3)
+    "💼 Portfolio sync: connect Fidelity, Schwab, Robinhood + 10,000 more via Plaid",
+    "🎯 Position planning: extremum zones (RSI + Bollinger + score percentile)",
+    "🪜 Entry ladder: starter / core / deep accumulation-zone rungs",
+    "💰 Cost-basis profit-taking framework (25% / 50% / 75% ring-fence)",
+    "📉 Historical context: median forward 30d/90d returns at similar setups",
+    "🤖 AI position summary: Claude reads your plan and writes a plain-English recap",
+    // Alerts (Sprint 1E + Sprint 3)
+    "🚨 Unlimited email alerts including zone-target ('when BTC enters distribution')",
+    // Digest (Phase 1C)
+    "📬 Optional daily AI digest email (~7am ET)",
   ],
 };
 
