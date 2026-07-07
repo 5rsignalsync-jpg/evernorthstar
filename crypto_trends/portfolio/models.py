@@ -42,6 +42,33 @@ class BrokerageAccount(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class CryptoPosition(SQLModel, table=True):
+    """A crypto position the user entered manually.
+
+    Sprint 4 alternative to Plaid brokerage sync for crypto — Plaid's
+    Investments product doesn't cover crypto exchanges (Coinbase, Binance,
+    Kraken, etc.), so we let users type positions in directly. Cost basis
+    is per-unit; the frontend does the math for total cost / total value /
+    gain.
+
+    Multiple rows with the same symbol are allowed — a user might hold
+    BTC on Coinbase AND on Kraken, or want to track separate lots for tax
+    purposes. `exchange_label` is a free-text field they can use to
+    distinguish ('Coinbase', 'Kraken', 'MetaMask', or blank).
+    """
+    __tablename__ = "crypto_positions"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    symbol: str = Field(index=True)  # BTC / ETH / SOL — uppercase, no USDT suffix
+    quantity: float
+    cost_basis_per_share: float  # cost per unit; total_cost = quantity * this
+    exchange_label: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class Holding(SQLModel, table=True):
     """A single security position snapshot from a brokerage sync.
 

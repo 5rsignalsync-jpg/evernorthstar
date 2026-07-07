@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
+import { CryptoPositionsSection } from "@/components/CryptoPositionsSection";
 import { PlaidLinkButton } from "@/components/PlaidLinkButton";
 import { PlanningCard } from "@/components/PlanningCard";
 import {
@@ -144,8 +145,13 @@ export default function PortfolioPage() {
           </p>
         )}
 
+        {/* Manual crypto positions — always shown for Pro users regardless
+            of whether a brokerage is linked. This is the "all your crypto
+            in one place" surface. */}
+        <CryptoPositionsSection />
+
         {loading && !data ? (
-          <p className="text-sm text-zinc-500">Loading portfolio…</p>
+          <p className="text-sm text-zinc-500">Loading brokerage holdings…</p>
         ) : data && data.accounts.length === 0 ? (
           <EmptyState plaidEnabled={data.plaid_enabled} />
         ) : data ? (

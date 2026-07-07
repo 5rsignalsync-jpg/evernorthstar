@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
 from crypto_trends.auth.db import get_session
@@ -603,3 +603,148 @@ def get_symbol_plan(
             "No price history found for this symbol. Try a ticker in our tracked universe.",
         )
     return _plan_to_out(plan, with_ai=with_ai)
+
+
+# ---------------- Manual crypto positions (Sprint 4) ----------------
+
+from crypto_trends.portfolio.models import CryptoPosition
+from crypto_trends.data.store import connect as _duck_connect
+
+
+class CryptoPositionIn(BaseModel):
+    symbol: str = Field(min_length=1, max_length=32)
+    quantity: float = Field(gt=0)
+    cost_basis_per_share: float = Field(gt=0)
+    exchange_label: Optional[str] = Field(default=None, max_length=64)
+    notes: Optional[str] = Field(default=None, max_length=500)
+
+
+class CryptoPositionOut(BaseModel):
+    id: int
+    symbol: str
+    quantity: float
+    cost_basis_per_share: float
+    exchange_label: Optional[str]
+    notes: Optional[str]
+    total_cost_usd: float
+    current_price: Optional[float]
+    current_value_usd: Optional[float]
+    unrealized_gain_usd: Optional[float]
+    unrealized_gain_pct: Optional[float]
+    created_at: datetime
+    updated_at: datetime
+
+
+def _current_price_for_crypto(symbol: str) -> Optional[float]:
+    """Pull the latest close from ohlcv. Tries bare BTC and BTCUSDT variants."""
+    candidates = [symbol.upper()]
+    if not symbol.upper().endswith("USDT"):
+        candidates.append(f"{symbol.upper()}USDT")
+    with _duck_connect(read_only=True) as conn:
+        for sym in candidates:
+            row = conn.execute(
+                "SELECT close FROM ohlcv WHERE symbol = ? ORDER BY ts DESC LIMIT 1",
+                [sym],
+            ).fetchone()
+            if row and row[0] is not None:
+                return float(row[0])
+    return None
+
+
+def _crypto_position_to_out(p: CryptoPosition) -> CryptoPositionOut:
+    total_cost = p.quantity * p.cost_basis_per_share
+    price = _current_price_for_crypto(p.symbol)
+    value = (price * p.quantity) if price is not None else None
+    gain = (value - total_cost) if value is not None else None
+    gain_pct = (
+        ((price / p.cost_basis_per_share) - 1) * 100
+        if price is not None and p.cost_basis_per_share > 0
+        else None
+    )
+    return CryptoPositionOut(
+        id=p.id or 0,
+        symbol=p.symbol,
+        quantity=p.quantity,
+        cost_basis_per_share=p.cost_basis_per_share,
+        exchange_label=p.exchange_label,
+        notes=p.notes,
+        total_cost_usd=total_cost,
+        current_price=price,
+        current_value_usd=value,
+        unrealized_gain_usd=gain,
+        unrealized_gain_pct=gain_pct,
+        created_at=p.created_at,
+        updated_at=p.updated_at,
+    )
+
+
+@router.get("/crypto/positions", response_model=list[CryptoPositionOut])
+def list_crypto_positions(
+    user: User = Depends(require_pro),
+    session: Session = Depends(get_session),
+) -> list[CryptoPositionOut]:
+    """List all manual crypto positions for the current Pro user, ordered
+    by current value descending so the biggest bags surface first."""
+    rows = session.exec(
+        select(CryptoPosition)
+        .where(CryptoPosition.user_id == user.id)
+        .order_by(CryptoPosition.created_at.desc())
+    ).all()
+    outs = [_crypto_position_to_out(r) for r in rows]
+    outs.sort(key=lambda o: o.current_value_usd or 0.0, reverse=True)
+    return outs
+
+
+@router.post("/crypto/positions", response_model=CryptoPositionOut, status_code=201)
+def create_crypto_position(
+    payload: CryptoPositionIn,
+    user: User = Depends(require_pro),
+    session: Session = Depends(get_session),
+) -> CryptoPositionOut:
+    pos = CryptoPosition(
+        user_id=user.id or 0,
+        symbol=payload.symbol.strip().upper(),
+        quantity=payload.quantity,
+        cost_basis_per_share=payload.cost_basis_per_share,
+        exchange_label=(payload.exchange_label or "").strip() or None,
+        notes=(payload.notes or "").strip() or None,
+    )
+    session.add(pos)
+    session.commit()
+    session.refresh(pos)
+    return _crypto_position_to_out(pos)
+
+
+@router.patch("/crypto/positions/{pos_id}", response_model=CryptoPositionOut)
+def update_crypto_position(
+    pos_id: int,
+    payload: CryptoPositionIn,
+    user: User = Depends(require_pro),
+    session: Session = Depends(get_session),
+) -> CryptoPositionOut:
+    pos = session.get(CryptoPosition, pos_id)
+    if pos is None or pos.user_id != user.id:
+        raise HTTPException(404, "Crypto position not found")
+    pos.symbol = payload.symbol.strip().upper()
+    pos.quantity = payload.quantity
+    pos.cost_basis_per_share = payload.cost_basis_per_share
+    pos.exchange_label = (payload.exchange_label or "").strip() or None
+    pos.notes = (payload.notes or "").strip() or None
+    pos.updated_at = datetime.utcnow()
+    session.add(pos)
+    session.commit()
+    session.refresh(pos)
+    return _crypto_position_to_out(pos)
+
+
+@router.delete("/crypto/positions/{pos_id}", status_code=204)
+def delete_crypto_position(
+    pos_id: int,
+    user: User = Depends(require_pro),
+    session: Session = Depends(get_session),
+) -> None:
+    pos = session.get(CryptoPosition, pos_id)
+    if pos is None or pos.user_id != user.id:
+        raise HTTPException(404, "Crypto position not found")
+    session.delete(pos)
+    session.commit()

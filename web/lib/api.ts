@@ -441,6 +441,90 @@ export async function syncBrokerage(accountId: number): Promise<BrokerageAccount
   return res.json();
 }
 
+// ---------------- Manual crypto positions (Sprint 4) ----------------
+
+export type CryptoPosition = {
+  id: number;
+  symbol: string;
+  quantity: number;
+  cost_basis_per_share: number;
+  exchange_label: string | null;
+  notes: string | null;
+  total_cost_usd: number;
+  current_price: number | null;
+  current_value_usd: number | null;
+  unrealized_gain_usd: number | null;
+  unrealized_gain_pct: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CryptoPositionInput = {
+  symbol: string;
+  quantity: number;
+  cost_basis_per_share: number;
+  exchange_label?: string | null;
+  notes?: string | null;
+};
+
+export async function listCryptoPositions(): Promise<CryptoPosition[]> {
+  const res = await fetch(`${BASE}/portfolio/crypto/positions`, {
+    cache: "no-store",
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(`List crypto positions failed: ${res.status}`);
+  return res.json();
+}
+
+export async function createCryptoPosition(
+  input: CryptoPositionInput,
+): Promise<CryptoPosition> {
+  const res = await fetch(`${BASE}/portfolio/crypto/positions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(input),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    let msg = `${res.status}`;
+    try {
+      const body = await res.json();
+      if (body?.detail) msg = String(body.detail);
+    } catch {
+      /* ignore */
+    }
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+export async function updateCryptoPosition(
+  id: number,
+  input: CryptoPositionInput,
+): Promise<CryptoPosition> {
+  const res = await fetch(`${BASE}/portfolio/crypto/positions/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(input),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Update crypto position failed: ${res.status}`);
+  return res.json();
+}
+
+export async function deleteCryptoPosition(id: number): Promise<void> {
+  const res = await fetch(`${BASE}/portfolio/crypto/positions/${id}`, {
+    method: "DELETE",
+    credentials: "include",
+    cache: "no-store",
+  });
+  if (!res.ok && res.status !== 204) {
+    throw new Error(`Delete crypto position failed: ${res.status}`);
+  }
+}
+
 // ---------------- Position planning (Sprint 1 + 2) ----------------
 
 export type ZoneName =
