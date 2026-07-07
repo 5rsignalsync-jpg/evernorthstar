@@ -13,7 +13,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: ["/", "/pricing", "/sign-up", "/sign-in", "/legal/"],
-        disallow: ["/account", "/portfolio", "/billing/"],
+        disallow: ["/account", "/portfolio", "/planner", "/billing/"],
       },
     ],
     sitemap: "https://evernorthstar.app/sitemap.xml",

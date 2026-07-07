@@ -19,6 +19,8 @@ import {
   type SymbolDetail,
   type TickerDescription,
 } from "@/lib/api";
+import { useAuth } from "@/components/AuthProvider";
+import { PlanningCard } from "@/components/PlanningCard";
 
 function fmtPrice(p: number): string {
   if (p < 0.01) return p.toFixed(6);
@@ -45,6 +47,7 @@ export function SymbolDetailModal({
   signal: string;
   onClose: () => void;
 }) {
+  const { isPro } = useAuth();
   const [data, setData] = useState<SymbolDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [desc, setDesc] = useState<TickerDescription | null>(null);
@@ -52,6 +55,7 @@ export function SymbolDetailModal({
   const [askLoading, setAskLoading] = useState(false);
   const [earningsResult, setEarningsResult] = useState<EarningsSummaryResult | null>(null);
   const [earningsLoading, setEarningsLoading] = useState(false);
+  const [showPlan, setShowPlan] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -196,6 +200,39 @@ export function SymbolDetailModal({
                 }
               }}
             />
+
+            {/* Position planning — Pro-gated, one-click open */}
+            {isPro ? (
+              <div className="mt-4">
+                {showPlan ? (
+                  <PlanningCard symbol={data.base} />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowPlan(true)}
+                    className="w-full rounded-md border border-blue-600/40 bg-blue-500/5 hover:bg-blue-500/10 px-4 py-3 text-sm text-blue-200 flex items-center justify-between transition"
+                  >
+                    <span className="text-left">
+                      🎯 <strong>Show position plan for {data.base}</strong>
+                      <span className="block text-[11px] text-blue-300/70 mt-0.5">
+                        Extremum zone · entry ladder · ring-fence · historical context
+                      </span>
+                    </span>
+                    <span className="text-lg">▸</span>
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="mt-4">
+                <a
+                  href="/pricing"
+                  className="block rounded-md border border-indigo-500/40 bg-indigo-500/5 px-4 py-3 text-sm text-indigo-200 hover:bg-indigo-500/10 transition"
+                >
+                  🔒 <strong>Position planner</strong> — zone, entry ladder, ring-fence, historical context.
+                  <span className="text-indigo-300/70"> Included with Pro →</span>
+                </a>
+              </div>
+            )}
 
             <div className="mt-6">
               <h3 className="text-sm font-semibold text-zinc-300 mb-2">

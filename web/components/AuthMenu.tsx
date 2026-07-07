@@ -32,6 +32,13 @@ export function AuthMenu() {
   return (
     <div className="flex items-center gap-3 text-sm">
       <Link
+        href="/planner"
+        className="text-zinc-400 hover:text-zinc-100 text-xs hidden sm:inline"
+        title={isPro ? "Position Planner — zones, entry ladder, ring-fence" : "Pro feature — position planning"}
+      >
+        Planner
+      </Link>
+      <Link
         href="/portfolio"
         className="text-zinc-400 hover:text-zinc-100 text-xs hidden sm:inline"
         title={isPro ? "View your portfolio" : "Pro feature — connect a brokerage"}
