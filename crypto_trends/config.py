@@ -55,6 +55,20 @@ class Settings(BaseSettings):
     nowpayments_api_key: str = ""
     nowpayments_ipn_secret: str = ""
 
+    # Comp allowlist — comma-separated emails that should get lifetime Pro
+    # access on sign-up (no Stripe charge). Case-insensitive. Used for beta
+    # testers, family/friends, apology comps. Also promotes already-existing
+    # users who log in with a matching email.
+    comp_emails: str = ""
+
+    @property
+    def comp_emails_set(self) -> set[str]:
+        return {
+            e.strip().lower()
+            for e in self.comp_emails.split(",")
+            if e.strip()
+        }
+
     # Anthropic Claude — for AI features (Ask Why drilldown, Daily Digest).
     # Get key at console.anthropic.com. ~$5 free credit, then pay-as-you-go.
     # When empty, AI endpoints return 503 with a useful "feature pending" msg.

@@ -115,10 +115,14 @@ def register(
     if existing:
         raise HTTPException(409, "An account with that email already exists")
 
+    # Comp allowlist — beta testers, family, etc. get lifetime Pro on sign-up
+    # without going through Stripe. See settings.comp_emails.
+    is_comped = email in settings.comp_emails_set
     user = User(
         email=email,
         password_hash=hash_password(body.password),
-        subscription_tier="free",
+        subscription_tier="pro" if is_comped else "free",
+        subscription_expires_at=None,   # NULL = never expires, same as founder_lifetime
         last_login_at=datetime.utcnow(),
     )
     session.add(user)
@@ -144,6 +148,17 @@ def login(
         raise HTTPException(401, "Invalid email or password")
 
     user.last_login_at = datetime.utcnow()
+
+    # Comp safety net — if a user on the comp allowlist somehow ended up on
+    # free tier (signed up before their email was added), promote them on
+    # login. Cheap check, one-time flip.
+    if (
+        email in settings.comp_emails_set
+        and user.subscription_tier == "free"
+    ):
+        user.subscription_tier = "pro"
+        user.subscription_expires_at = None
+
     session.add(user)
     session.commit()
     session.refresh(user)
