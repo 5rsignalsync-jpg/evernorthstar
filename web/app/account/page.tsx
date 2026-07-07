@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { AdminPanel } from "@/components/AdminPanel";
 import { AlertsSection } from "@/components/AlertsSection";
 import { useAuth } from "@/components/AuthProvider";
 import { openBillingPortal, updatePrefs } from "@/lib/auth";
@@ -174,6 +175,9 @@ export default function AccountPage() {
             </p>
           )}
         </div>
+
+        {/* Admin (visible only to admins) */}
+        {user.is_admin && <AdminPanel />}
 
         {/* Alerts */}
         <AlertsSection isPro={isPro} />
