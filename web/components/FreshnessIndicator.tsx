@@ -64,13 +64,17 @@ export function FreshnessIndicator() {
       {open && (
         <div className="absolute right-0 top-full mt-2 z-30 w-72 rounded-md border border-zinc-700 bg-zinc-900 shadow-xl p-3">
           <div className="text-xs text-zinc-400 mb-2">
-            Latest data per sleeve. Refresh runs hourly.
+            Latest data per sleeve. Crypto refreshes every 15 min, equities
+            hourly.
           </div>
           <ul className="text-[11px] divide-y divide-zinc-800">
             {data.asset_classes.map((ac) => {
               const isEquity = ac.asset_class.startsWith("equity");
-              const greenMax = isEquity ? 24 * 3600 : 4 * 3600;
-              const amberMax = isEquity ? 5 * 86400 : 24 * 3600;
+              // Crypto expected freshness matches the 15-min intraday cron;
+              // equities still ride the hourly window (yfinance rate limits
+              // + FinBERT weight make a shorter cadence unsafe).
+              const greenMax = isEquity ? 24 * 3600 : 30 * 60;
+              const amberMax = isEquity ? 5 * 86400 : 6 * 3600;
               const age = ac.age_seconds === null ? Infinity : Math.max(0, ac.age_seconds);
               const acSev: "green" | "amber" | "red" =
                 ac.age_seconds === null

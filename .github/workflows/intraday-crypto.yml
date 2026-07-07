@@ -1,0 +1,64 @@
+# Intraday crypto refresh — every 15 minutes.
+#
+# Runs ONLY the crypto and crypto_micro sleeves (skip-equities, skip-news, etc).
+# This is Phase 2B MVP: real-time-ish signals for the two sleeves that support
+# them (Binance streams every second; yfinance is polite 15-min bars at best,
+# and news ingest is too heavy per crypto_trends/data/ingest/news.py).
+#
+# Wall-clock target: <90s per run. If it starts overrunning we bump to :00/:15/
+# :30/:45 offsets to guarantee non-overlap with the hourly full refresh at :15.
+#
+# Requires repo secret FLY_API_TOKEN.
+
+name: Intraday crypto refresh
+
+on:
+  schedule:
+    # Every 15 minutes on the :05/:20/:35/:50 marks — deliberately offset from
+    # the hourly full refresh at :15 so the two never overlap on the same box.
+    - cron: '5,20,35,50 * * * *'
+  workflow_dispatch:
+
+# Prevent parallel runs of the same workflow from stacking. If the previous
+# 15-min job is still running when the next fires, cancel it — the newer bar
+# supersedes it anyway.
+concurrency:
+  group: intraday-crypto
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    name: Refresh crypto sleeves
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Wake the Fly machine
+        run: |
+          for i in 1 2 3 4 5; do
+            if curl -s -m 10 -f https://evernorthstar.fly.dev/health > /dev/null; then
+              echo "Machine awake (attempt $i)"
+              exit 0
+            fi
+            echo "Machine still cold (attempt $i), sleeping…"
+            sleep 4
+          done
+          echo "Could not wake machine after 5 attempts"
+          exit 1
+
+      - name: Run crypto-only refresh on Fly
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          flyctl ssh console -a evernorthstar \
+            -C "python -m scripts.refresh_all --crypto-only"
+
+      # Alerts scan runs against fresh crypto data so zone-target alerts fire
+      # every 15 min instead of every hour. Same 6h per-user cooldown applies.
+      - name: Scan + dispatch alerts
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          flyctl ssh console -a evernorthstar \
+            -C "python -m scripts.run_alerts"

@@ -8,6 +8,7 @@ Usage:
     python -m scripts.refresh_all                  # default daily refresh
     python -m scripts.refresh_all --penny-screen   # also re-run penny screener (slow)
     python -m scripts.refresh_all --skip-crypto    # skip a specific phase
+    python -m scripts.refresh_all --crypto-only    # ONLY crypto phases (for 15-min intraday cron)
 """
 
 from __future__ import annotations
@@ -66,7 +67,23 @@ def main() -> int:
                         "Otherwise reuses the hardcoded candidate list.")
     p.add_argument("--crypto-since", default="30d")
     p.add_argument("--equity-since", default="365d")
+    p.add_argument("--crypto-only", action="store_true",
+                   help="Only run crypto + crypto_micro phases (skip everything else). "
+                        "Used by the 15-min intraday cron. Signals restricted to crypto sleeves.")
     args = p.parse_args()
+
+    # --crypto-only implies skip-everything-else + a shorter default window.
+    # Intraday refresh doesn't need 30 days of history, just enough to compute
+    # the current bar's momentum score. Keeping it short (~2d) means Binance
+    # returns fewer bars per symbol and the whole run stays under ~90s.
+    if args.crypto_only:
+        args.skip_equities = True
+        args.skip_fundamentals = True
+        args.skip_news = True
+        args.skip_congress = True
+        args.skip_earnings = True
+        if args.crypto_since == "30d":
+            args.crypto_since = "2d"
 
     results: list[PhaseResult] = []
 
@@ -143,16 +160,22 @@ def main() -> int:
             return ingest(lookahead_days=30, lookback_days=14)
         results.append(_run_phase("earnings", _earnings))
 
-    # 5) Signals (all asset classes, all signals)
+    # 5) Signals (all asset classes, all signals — or just crypto if --crypto-only)
     if not args.skip_signals:
         def _signals():
             from crypto_trends.signals.runner import (
                 compute_and_store_long_term, compute_and_store_momentum,
             )
+            asset_classes = (
+                ("crypto", "crypto_micro")
+                if args.crypto_only
+                else ("crypto", "crypto_micro", "equity_large", "equity_micro")
+            )
             total = 0
-            for ac in ("crypto", "crypto_micro", "equity_large", "equity_micro"):
+            for ac in asset_classes:
                 total += compute_and_store_momentum(asset_class=ac, latest_only=True)
-            total += compute_and_store_long_term("equity_large")
+            if not args.crypto_only:
+                total += compute_and_store_long_term("equity_large")
             return total
         results.append(_run_phase("signals", _signals))
 
