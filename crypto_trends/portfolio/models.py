@@ -69,6 +69,36 @@ class CryptoPosition(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class CryptoRealization(SQLModel, table=True):
+    """A recorded sale (partial or full) against a CryptoPosition.
+
+    Each row represents a "mark as sold" event. Immutable ledger — we never
+    UPDATE these; corrections happen via a new row (a negative-quantity entry
+    would represent an unwind, though we don't expose that in the UI yet).
+
+    is_long_term is captured at realization time so future tax-rate changes
+    or holding-period edits to the source position don't retroactively
+    change historical realizations. cost_basis_per_share_at_sale is the
+    per-unit cost basis effective when this slice was sold — locked in
+    at time of realization so subsequent averaging into the position
+    doesn't distort historical realized PL.
+    """
+    __tablename__ = "crypto_realizations"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    position_id: int = Field(foreign_key="crypto_positions.id", index=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    quantity_sold: float
+    price_sold: float                 # USD per unit at sale
+    cost_basis_per_share_at_sale: float
+    realized_pl_usd: float            # (price_sold - cost_basis) * quantity_sold
+    is_long_term: bool                # true if held ≥ 365 days at sale time
+    tax_owed_usd_est: float           # realized_pl_usd × applicable rate
+    sold_at: datetime                 # user-provided sale timestamp
+    note: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
 class Holding(SQLModel, table=True):
     """A single security position snapshot from a brokerage sync.
 

@@ -20,7 +20,7 @@ from crypto_trends.auth.deps import require_pro
 from crypto_trends.auth.models import User, AlertRule
 from crypto_trends.portfolio import analysis, planning, plaid_client, sync
 from crypto_trends.portfolio.encryption import encrypt_token
-from crypto_trends.portfolio.models import BrokerageAccount, Holding
+from crypto_trends.portfolio.models import BrokerageAccount, CryptoRealization, Holding
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 log = logging.getLogger(__name__)
@@ -284,6 +284,14 @@ class RingFenceScenarioOut(BaseModel):
     amount_to_take_usd: float
     remaining_position_value: float
     net_pl_if_remainder_zero_usd: float
+    # Tax estimate fields. is_long_term reflects the position's holding
+    # period at plan time (≥365 days). Rates are US federal + CO state
+    # defaults; higher/lower-bracket users may want to interpret the number
+    # against their own situation — flagged in the UI copy.
+    is_long_term: bool = False
+    tax_rate_applied_pct: float = 0.0
+    tax_owed_usd: float = 0.0
+    net_after_tax_usd: float = 0.0
 
 
 class HistoricalOutcomeOut(BaseModel):
@@ -452,6 +460,13 @@ def get_holding_plan(
                 if holding.cost_basis and holding.quantity
                 else None
             ),
+            # Plaid Holdings are snapshots overwritten on each sync — Plaid's
+            # Investments product doesn't expose the actual purchase date, so
+            # we can't derive an accurate holding period here. Passing None
+            # falls back to the conservative short-term rate; users on real
+            # long-term positions will want to override at the UI layer or
+            # confirm with their own broker's cost-basis report.
+            position_acquired_at=None,
         )
         if plan is not None:
             break
@@ -748,3 +763,205 @@ def delete_crypto_position(
         raise HTTPException(404, "Crypto position not found")
     session.delete(pos)
     session.commit()
+
+
+# ---------------- Crypto position plan (tax-aware) ----------------
+
+@router.get("/crypto/positions/{pos_id}/plan", response_model=PositionPlanOut)
+def get_crypto_position_plan(
+    pos_id: int,
+    with_ai: bool = False,
+    user: User = Depends(require_pro),
+    session: Session = Depends(get_session),
+) -> PositionPlanOut:
+    """Position plan for a manually-entered crypto position.
+
+    Uses the position's created_at as the acquisition date so the ring-fence
+    tax fields reflect the actual holding period (long-term vs short-term).
+    Symbol resolution mirrors the Plaid holding path — 'BTC' → 'BTCUSDT'
+    when needed to hit the tracked universe.
+    """
+    pos = session.get(CryptoPosition, pos_id)
+    if pos is None or pos.user_id != user.id:
+        raise HTTPException(404, "Crypto position not found")
+
+    candidates = [pos.symbol]
+    if not pos.symbol.endswith("USDT"):
+        candidates.append(f"{pos.symbol}USDT")
+    plan = None
+    for sym in candidates:
+        plan = planning.build_position_plan(
+            symbol=sym,
+            base=pos.symbol,
+            asset_class="crypto",
+            quantity=pos.quantity,
+            cost_basis_per_share=pos.cost_basis_per_share,
+            position_acquired_at=pos.created_at,
+        )
+        if plan is not None:
+            break
+    if plan is None:
+        raise HTTPException(
+            424,
+            "No price history for this symbol. Planning is currently limited "
+            "to assets in our tracked universe.",
+        )
+    return _plan_to_out(plan, with_ai=with_ai)
+
+
+# ---------------- Mark-as-sold (realizations ledger) ----------------
+
+# Tax constants mirror crypto_trends.portfolio.planning defaults. When
+# planning eventually gains a user-preference override, both should read
+# from the same source rather than duplicating this constant.
+_FED_LT_RATE = 0.15
+_FED_ST_RATE = 0.22
+_STATE_RATE = 0.044
+_LONG_TERM_DAYS = 365
+
+
+class RealizeIn(BaseModel):
+    quantity_sold: float = Field(gt=0)
+    price_sold: float = Field(gt=0)
+    sold_at: Optional[datetime] = None       # None → now
+    note: Optional[str] = Field(default=None, max_length=200)
+
+
+class RealizationOut(BaseModel):
+    id: int
+    position_id: int
+    symbol: str
+    quantity_sold: float
+    price_sold: float
+    cost_basis_per_share_at_sale: float
+    realized_pl_usd: float
+    is_long_term: bool
+    tax_owed_usd_est: float
+    net_after_tax_usd: float
+    sold_at: datetime
+    note: Optional[str]
+    created_at: datetime
+
+
+class RealizeResponse(BaseModel):
+    realization: RealizationOut
+    remaining_quantity: float                 # after the sale
+    position_closed: bool                     # true when remaining_quantity == 0
+    disclaimer: str = (
+        "Tax figures are estimates using default US federal + Colorado state "
+        "rates. Consult a tax professional for your specific situation."
+    )
+
+
+def _realization_to_out(r: CryptoRealization, symbol: str) -> RealizationOut:
+    return RealizationOut(
+        id=r.id or 0,
+        position_id=r.position_id,
+        symbol=symbol,
+        quantity_sold=r.quantity_sold,
+        price_sold=r.price_sold,
+        cost_basis_per_share_at_sale=r.cost_basis_per_share_at_sale,
+        realized_pl_usd=r.realized_pl_usd,
+        is_long_term=r.is_long_term,
+        tax_owed_usd_est=r.tax_owed_usd_est,
+        net_after_tax_usd=(r.quantity_sold * r.price_sold) - r.tax_owed_usd_est,
+        sold_at=r.sold_at,
+        note=r.note,
+        created_at=r.created_at,
+    )
+
+
+@router.post(
+    "/crypto/positions/{pos_id}/realize",
+    response_model=RealizeResponse,
+    status_code=201,
+)
+def realize_crypto_position(
+    pos_id: int,
+    payload: RealizeIn,
+    user: User = Depends(require_pro),
+    session: Session = Depends(get_session),
+) -> RealizeResponse:
+    """Record a partial or full sale of a CryptoPosition.
+
+    Deducts quantity_sold from the source position, computes realized PL +
+    estimated tax at the current holding period, and appends an immutable
+    row to crypto_realizations. If the remaining quantity drops to zero we
+    delete the position (a "closed" position with qty=0 clutters lists).
+    """
+    pos = session.get(CryptoPosition, pos_id)
+    if pos is None or pos.user_id != user.id:
+        raise HTTPException(404, "Crypto position not found")
+    if payload.quantity_sold > pos.quantity + 1e-9:
+        raise HTTPException(
+            422,
+            f"Can't sell {payload.quantity_sold} — you only hold {pos.quantity}.",
+        )
+
+    sold_at = payload.sold_at or datetime.utcnow()
+    held_days = (sold_at - pos.created_at).days
+    is_long_term = held_days >= _LONG_TERM_DAYS
+    fed_rate = _FED_LT_RATE if is_long_term else _FED_ST_RATE
+    combined = fed_rate + _STATE_RATE
+
+    realized_pl = (payload.price_sold - pos.cost_basis_per_share) * payload.quantity_sold
+    tax_owed_est = max(0.0, realized_pl) * combined  # never taxes losses
+
+    r = CryptoRealization(
+        position_id=pos_id,
+        user_id=user.id or 0,
+        quantity_sold=payload.quantity_sold,
+        price_sold=payload.price_sold,
+        cost_basis_per_share_at_sale=pos.cost_basis_per_share,
+        realized_pl_usd=realized_pl,
+        is_long_term=is_long_term,
+        tax_owed_usd_est=tax_owed_est,
+        sold_at=sold_at,
+        note=(payload.note or "").strip() or None,
+    )
+    session.add(r)
+
+    remaining = pos.quantity - payload.quantity_sold
+    symbol = pos.symbol
+    closed = remaining <= 1e-9
+    if closed:
+        session.delete(pos)
+    else:
+        pos.quantity = remaining
+        pos.updated_at = datetime.utcnow()
+        session.add(pos)
+
+    session.commit()
+    session.refresh(r)
+
+    return RealizeResponse(
+        realization=_realization_to_out(r, symbol),
+        remaining_quantity=0.0 if closed else remaining,
+        position_closed=closed,
+    )
+
+
+@router.get("/crypto/realizations", response_model=list[RealizationOut])
+def list_crypto_realizations(
+    limit: int = 100,
+    user: User = Depends(require_pro),
+    session: Session = Depends(get_session),
+) -> list[RealizationOut]:
+    """Full realized-PL ledger for the current user, newest first."""
+    limit = max(1, min(limit, 500))
+    rows = session.exec(
+        select(CryptoRealization)
+        .where(CryptoRealization.user_id == user.id)
+        .order_by(CryptoRealization.sold_at.desc())
+        .limit(limit)
+    ).all()
+    # Batch-resolve symbols for the position_ids referenced. Positions may
+    # be deleted after being fully realized — fall back to '?' for those.
+    if not rows:
+        return []
+    position_ids = list({r.position_id for r in rows})
+    pos_rows = session.exec(
+        select(CryptoPosition).where(CryptoPosition.id.in_(position_ids))
+    ).all()
+    sym_by_id = {p.id: p.symbol for p in pos_rows}
+    return [_realization_to_out(r, sym_by_id.get(r.position_id, "?")) for r in rows]

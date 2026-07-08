@@ -239,9 +239,23 @@ export function PlanningCard({
                 <tr>
                   <th className="text-left px-3 py-2">Lock</th>
                   <th className="text-right px-3 py-2">Take</th>
-                  <th className="text-right px-3 py-2">Keep at risk</th>
-                  <th className="text-right px-3 py-2" title="Net PL if remainder went to zero">
-                    Worst-case net
+                  <th
+                    className="text-right px-3 py-2"
+                    title="Estimated federal + Colorado state tax owed on this realization"
+                  >
+                    Tax est.
+                  </th>
+                  <th
+                    className="text-right px-3 py-2"
+                    title="Take minus estimated tax owed"
+                  >
+                    Net after tax
+                  </th>
+                  <th
+                    className="text-right px-3 py-2"
+                    title="Net PL if remainder went to zero"
+                  >
+                    Worst case
                   </th>
                 </tr>
               </thead>
@@ -257,8 +271,15 @@ export function PlanningCard({
                     <td className="px-3 py-2 text-right tabular-nums text-emerald-300">
                       {fmtUSD(s.amount_to_take_usd)}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-zinc-300">
-                      {fmtUSD(s.remaining_position_value)}
+                    <td className="px-3 py-2 text-right tabular-nums text-rose-300/80">
+                      −{fmtUSD(s.tax_owed_usd)}
+                      <div className="text-[9px] text-zinc-500 leading-tight">
+                        {s.is_long_term ? "LT" : "ST"} ·{" "}
+                        {(s.tax_rate_applied_pct * 100).toFixed(1)}%
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-emerald-200">
+                      {fmtUSD(s.net_after_tax_usd)}
                     </td>
                     <td
                       className={`px-3 py-2 text-right tabular-nums ${
@@ -274,6 +295,11 @@ export function PlanningCard({
               </tbody>
             </table>
           </div>
+          <p className="text-[10px] text-zinc-500 mt-2 leading-relaxed">
+            Tax estimates use US federal (15% LT / 22% ST) + Colorado state
+            (4.4%) defaults. Your marginal bracket and residency may differ —
+            confirm with a tax professional before acting.
+          </p>
         </div>
       )}
 

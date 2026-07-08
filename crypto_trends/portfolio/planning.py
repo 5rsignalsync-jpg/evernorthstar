@@ -4,7 +4,8 @@ Given a user's holding (quantity, cost basis) and the current market state
 (price, zone reading), we produce a "planning card" that shows:
 
   - The current unrealized gain / loss
-  - Ring-fence scenarios (25% / 50% / 75% of gains locked in)
+  - Ring-fence scenarios (25% / 50% / 75% of gains locked in), with
+    holding-period-aware federal + state tax estimates
   - Historical context: at similar setups (zone + score percentile), what
     happened to the price 30 / 90 days later?
   - The zone's current price bounds (accumulation / distribution)
@@ -17,13 +18,24 @@ produce a "sell" / "buy" recommendation string here.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Optional
 
 import pandas as pd
 
 from crypto_trends.data.store import connect
 from crypto_trends.signals.extremum import ZoneReading, compute_zone
+
+# Federal cap-gains defaults for a middle-bracket US investor. LT = held
+# ≥365 days; ST = held <365 days (taxed as ordinary income at the marginal
+# bracket, defaulted here to 22%). State default is Colorado (Ed's operating
+# jurisdiction — see project_entity_jurisdiction memory). Users in higher/
+# lower brackets or in no-income-tax states can override via prefs later;
+# for the MVP we ship one honest estimate and label it as such.
+_DEFAULT_FED_LT_RATE = 0.15
+_DEFAULT_FED_ST_RATE = 0.22
+_DEFAULT_STATE_RATE = 0.044
+_LONG_TERM_THRESHOLD_DAYS = 365
 
 
 @dataclass
@@ -35,12 +47,22 @@ class RingFenceScenario:
     the original total cost. A NEGATIVE number here means "even if you
     take this ring-fence, you'd still be net-down if the rest goes to
     zero." Useful risk-management framing.
+
+    Tax fields are estimates. is_long_term is computed from the position's
+    holding period at plan time. tax_owed_usd applies fed+state rates to the
+    REALIZED GAIN portion (proceeds from the ring-fence action, minus the
+    cost basis that ring-fence consumes proportionally). net_after_tax_usd
+    is the ring-fence proceeds after subtracting that estimated tax.
     """
 
     pct_of_gain_locked: float          # 0.25, 0.50, 0.75
     amount_to_take_usd: float          # dollar amount to ring-fence
     remaining_position_value: float    # what stays in the trade
     net_pl_if_remainder_zero_usd: float
+    is_long_term: bool                  # holding >= 365 days
+    tax_rate_applied_pct: float         # combined fed + state, e.g. 0.194
+    tax_owed_usd: float                 # estimated tax on the realized gain
+    net_after_tax_usd: float            # amount_to_take_usd - tax_owed_usd
 
 
 @dataclass
@@ -124,29 +146,54 @@ def compute_ring_fence_scenarios(
     quantity: float,
     current_price: float,
     cost_basis_per_share: float,
+    position_acquired_at: Optional[datetime] = None,
 ) -> list[RingFenceScenario]:
-    """Return the 25% / 50% / 75% of-gains ring-fence table for a position."""
+    """Return the 25% / 50% / 75% of-gains ring-fence table for a position.
+
+    If position_acquired_at is provided, tax fields reflect the position's
+    holding period at plan time (long-term if ≥ 365 days). If not provided,
+    we default to short-term (conservative — never understate the bill).
+    """
     if cost_basis_per_share <= 0 or current_price <= 0 or quantity <= 0:
         return []
     total_cost = cost_basis_per_share * quantity
     total_value = current_price * quantity
     unrealized_gain = total_value - total_cost
     if unrealized_gain <= 0:
-        # No gain to ring-fence; return empty rather than negative scenarios
         return []
+
+    is_long_term = False
+    if position_acquired_at is not None:
+        held_days = (datetime.utcnow() - position_acquired_at).days
+        is_long_term = held_days >= _LONG_TERM_THRESHOLD_DAYS
+
+    fed_rate = _DEFAULT_FED_LT_RATE if is_long_term else _DEFAULT_FED_ST_RATE
+    combined_rate = fed_rate + _DEFAULT_STATE_RATE
+
     scenarios: list[RingFenceScenario] = []
     for pct in (0.25, 0.50, 0.75):
         take = unrealized_gain * pct
         remaining = total_value - take
-        # Worst-case net PL = cash-in-hand minus original cost.
-        # Negative = you'd still be net-down if the rest went to zero.
-        # Positive = you've locked in a profit even if the rest wipes.
         net_pl_if_zero = take - total_cost
+        # Tax applies to the REALIZED GAIN portion. When you ring-fence
+        # X% of gain, you're selling enough shares to net X% of the gain
+        # in cash — but that "take" is proceeds, not gain. The gain portion
+        # of the proceeds equals the gain-locked amount (`take`) because the
+        # ring-fence is denominated in gain, not proceeds. Proceeds ≠ take:
+        # proceeds = cost basis of shares sold + gain locked. But `take` in
+        # this framework represents the gain locked. So the taxable amount
+        # IS `take`. Tax = take × rate.
+        tax_owed = take * combined_rate
+        net_after_tax = take - tax_owed
         scenarios.append(RingFenceScenario(
             pct_of_gain_locked=pct,
             amount_to_take_usd=take,
             remaining_position_value=remaining,
             net_pl_if_remainder_zero_usd=net_pl_if_zero,
+            is_long_term=is_long_term,
+            tax_rate_applied_pct=combined_rate,
+            tax_owed_usd=tax_owed,
+            net_after_tax_usd=net_after_tax,
         ))
     return scenarios
 
@@ -350,6 +397,7 @@ def build_position_plan(
     asset_class: str,
     quantity: float,
     cost_basis_per_share: Optional[float] = None,
+    position_acquired_at: Optional[datetime] = None,
 ) -> Optional[PositionPlan]:
     """Build the full planning payload for one position.
 
@@ -386,6 +434,7 @@ def build_position_plan(
             quantity=quantity,
             current_price=current_price,
             cost_basis_per_share=cost_basis_per_share,
+            position_acquired_at=position_acquired_at,
         )
 
     historical: Optional[HistoricalStats] = None

@@ -552,7 +552,92 @@ export type RingFenceScenario = {
   amount_to_take_usd: number;
   remaining_position_value: number;
   net_pl_if_remainder_zero_usd: number;
+  is_long_term: boolean;
+  tax_rate_applied_pct: number;
+  tax_owed_usd: number;
+  net_after_tax_usd: number;
 };
+
+export type Realization = {
+  id: number;
+  position_id: number;
+  symbol: string;
+  quantity_sold: number;
+  price_sold: number;
+  cost_basis_per_share_at_sale: number;
+  realized_pl_usd: number;
+  is_long_term: boolean;
+  tax_owed_usd_est: number;
+  net_after_tax_usd: number;
+  sold_at: string;
+  note: string | null;
+  created_at: string;
+};
+
+export type RealizeInput = {
+  quantity_sold: number;
+  price_sold: number;
+  sold_at?: string;
+  note?: string;
+};
+
+export type RealizeResponse = {
+  realization: Realization;
+  remaining_quantity: number;
+  position_closed: boolean;
+  disclaimer: string;
+};
+
+export async function realizeCryptoPosition(
+  positionId: number,
+  input: RealizeInput,
+): Promise<RealizeResponse> {
+  const res = await fetch(
+    `${BASE}/portfolio/crypto/positions/${positionId}/realize`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(input),
+      cache: "no-store",
+    },
+  );
+  if (!res.ok) {
+    let msg = `${res.status}`;
+    try {
+      const body = await res.json();
+      if (body?.detail) msg = String(body.detail);
+    } catch { /* ignore */ }
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+export async function fetchCryptoPositionPlan(
+  positionId: number,
+  opts: { withAi?: boolean } = {},
+): Promise<PositionPlan> {
+  const params = new URLSearchParams();
+  if (opts.withAi) params.set("with_ai", "true");
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  const res = await fetch(
+    `${BASE}/portfolio/crypto/positions/${positionId}/plan${suffix}`,
+    { credentials: "include", cache: "no-store" },
+  );
+  if (!res.ok) throw new Error(`Position plan failed: ${res.status}`);
+  return res.json();
+}
+
+export async function listCryptoRealizations(
+  limit = 100,
+): Promise<Realization[]> {
+  const res = await fetch(
+    `${BASE}/portfolio/crypto/realizations?limit=${limit}`,
+    { credentials: "include", cache: "no-store" },
+  );
+  if (!res.ok) throw new Error(`List realizations failed: ${res.status}`);
+  return res.json();
+}
 
 export type HistoricalOutcome = {
   ticker: string;

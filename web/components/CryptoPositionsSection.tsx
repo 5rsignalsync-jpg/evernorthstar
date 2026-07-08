@@ -5,9 +5,12 @@ import {
   createCryptoPosition,
   deleteCryptoPosition,
   listCryptoPositions,
+  listCryptoRealizations,
+  realizeCryptoPosition,
   updateCryptoPosition,
   type CryptoPosition,
   type CryptoPositionInput,
+  type Realization,
 } from "@/lib/api";
 import { PlanningCard } from "@/components/PlanningCard";
 
@@ -44,6 +47,9 @@ export function CryptoPositionsSection() {
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [sellingPos, setSellingPos] = useState<CryptoPosition | null>(null);
+  const [realizations, setRealizations] = useState<Realization[]>([]);
+  const [realizationsOpen, setRealizationsOpen] = useState(false);
 
   // Add / edit form state
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -58,7 +64,15 @@ export function CryptoPositionsSection() {
     setLoading(true);
     setError(null);
     try {
-      setPositions(await listCryptoPositions());
+      // Fetch positions and realizations in parallel — realizations are
+      // cheap and let the "Realized PL" panel stay in sync when the user
+      // sells a position without a full page reload.
+      const [pos, real] = await Promise.all([
+        listCryptoPositions(),
+        listCryptoRealizations(50).catch(() => [] as Realization[]),
+      ]);
+      setPositions(pos);
+      setRealizations(real);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -373,6 +387,14 @@ export function CryptoPositionsSection() {
                       >
                         <button
                           type="button"
+                          onClick={() => setSellingPos(p)}
+                          className="text-emerald-300 hover:text-emerald-200 mr-2"
+                          title="Record a sale — tracks realized PL + tax"
+                        >
+                          Sell
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => startEdit(p)}
                           className="text-zinc-400 hover:text-zinc-100 mr-2"
                         >
@@ -405,6 +427,308 @@ export function CryptoPositionsSection() {
           </table>
         </div>
       )}
+
+      {/* Realized-PL ledger */}
+      {realizations.length > 0 && (
+        <div className="mt-4 rounded border border-zinc-800 bg-zinc-950/40">
+          <button
+            type="button"
+            onClick={() => setRealizationsOpen((v) => !v)}
+            className="w-full flex items-center justify-between px-3 py-2 text-[11px] text-zinc-300 hover:bg-zinc-900/40"
+          >
+            <span className="font-semibold uppercase tracking-wider">
+              💵 Realized PL — {realizations.length} sale
+              {realizations.length === 1 ? "" : "s"}
+            </span>
+            <RealizedTotals rows={realizations} />
+            <span className="text-zinc-500">{realizationsOpen ? "▾" : "▸"}</span>
+          </button>
+          {realizationsOpen && (
+            <RealizationsTable rows={realizations} />
+          )}
+        </div>
+      )}
+
+      {sellingPos && (
+        <SellModal
+          position={sellingPos}
+          onClose={() => setSellingPos(null)}
+          onSold={async () => {
+            setSellingPos(null);
+            await refresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function RealizedTotals({ rows }: { rows: Realization[] }) {
+  const gain = rows.reduce((s, r) => s + r.realized_pl_usd, 0);
+  const taxOwed = rows.reduce((s, r) => s + r.tax_owed_usd_est, 0);
+  return (
+    <span className="text-[11px] tabular-nums text-zinc-400">
+      Net gain{" "}
+      <span className={gain >= 0 ? "text-emerald-300" : "text-rose-300"}>
+        {fmtUSD(gain)}
+      </span>
+      <span className="ml-3 text-rose-300/70">
+        Tax est. −{fmtUSD(taxOwed)}
+      </span>
+    </span>
+  );
+}
+
+function RealizationsTable({ rows }: { rows: Realization[] }) {
+  return (
+    <div className="border-t border-zinc-800 overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead className="text-[10px] text-zinc-500 uppercase tracking-wider">
+          <tr>
+            <th className="text-left px-3 py-2">Sold</th>
+            <th className="text-left px-3 py-2">Symbol</th>
+            <th className="text-right px-3 py-2">Qty</th>
+            <th className="text-right px-3 py-2">Price</th>
+            <th className="text-right px-3 py-2">Realized PL</th>
+            <th className="text-right px-3 py-2">Tax est.</th>
+            <th className="text-right px-3 py-2">Net</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id} className="border-t border-zinc-800/60">
+              <td className="px-3 py-2 text-zinc-400 text-[11px]">
+                {new Date(r.sold_at + "Z").toLocaleDateString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+              </td>
+              <td className="px-3 py-2 text-zinc-200 font-medium tabular-nums">
+                {r.symbol}
+                <span
+                  className={
+                    "ml-1 text-[9px] uppercase " +
+                    (r.is_long_term ? "text-emerald-400" : "text-amber-400")
+                  }
+                  title={
+                    r.is_long_term
+                      ? "Long-term capital gains (held ≥365 days)"
+                      : "Short-term capital gains (held <365 days)"
+                  }
+                >
+                  {r.is_long_term ? "LT" : "ST"}
+                </span>
+              </td>
+              <td className="px-3 py-2 text-right tabular-nums text-zinc-300">
+                {fmtQty(r.quantity_sold)}
+              </td>
+              <td className="px-3 py-2 text-right tabular-nums text-zinc-300">
+                {fmtUSD(r.price_sold)}
+              </td>
+              <td
+                className={
+                  "px-3 py-2 text-right tabular-nums " +
+                  (r.realized_pl_usd >= 0 ? "text-emerald-300" : "text-rose-300")
+                }
+              >
+                {fmtUSD(r.realized_pl_usd)}
+              </td>
+              <td className="px-3 py-2 text-right tabular-nums text-rose-300/70">
+                −{fmtUSD(r.tax_owed_usd_est)}
+              </td>
+              <td className="px-3 py-2 text-right tabular-nums text-emerald-200 font-medium">
+                {fmtUSD(r.net_after_tax_usd)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function SellModal({
+  position,
+  onClose,
+  onSold,
+}: {
+  position: CryptoPosition;
+  onClose: () => void;
+  onSold: () => void | Promise<void>;
+}) {
+  const [qty, setQty] = useState<string>(String(position.quantity));
+  const [price, setPrice] = useState<string>(
+    position.current_price ? String(position.current_price) : "",
+  );
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const qtyNum = Number(qty);
+  const priceNum = Number(price);
+  const valid =
+    qtyNum > 0 && qtyNum <= position.quantity + 1e-9 && priceNum > 0;
+  const proceeds = valid ? qtyNum * priceNum : 0;
+  const costLot = valid ? qtyNum * position.cost_basis_per_share : 0;
+  const gain = proceeds - costLot;
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setErr(null);
+    if (!valid) {
+      setErr("Enter a quantity you hold and a positive price.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await realizeCryptoPosition(position.id, {
+        quantity_sold: qtyNum,
+        price_sold: priceNum,
+        note: note.trim() || undefined,
+      });
+      await onSold();
+    } catch (e2) {
+      setErr(e2 instanceof Error ? e2.message : String(e2));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-zinc-950 border border-zinc-800 rounded-lg max-w-md w-full p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-baseline justify-between mb-3">
+          <h3 className="text-sm font-semibold text-zinc-100 uppercase tracking-wider">
+            💵 Sell {position.symbol}
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-zinc-500 hover:text-zinc-100 text-xs"
+          >
+            ✕
+          </button>
+        </div>
+        <p className="text-[11px] text-zinc-500 mb-4 leading-relaxed">
+          Record a partial or full sale. Realized PL and estimated tax get
+          logged; if you sell everything, the position closes.
+        </p>
+
+        <form onSubmit={submit} className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <label className="block">
+              <span className="text-[10px] text-zinc-400 uppercase tracking-wider">
+                Qty sold (max {fmtQty(position.quantity)})
+              </span>
+              <input
+                type="number"
+                step="any"
+                value={qty}
+                onChange={(e) => setQty(e.target.value)}
+                className="block w-full mt-0.5 bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none"
+                required
+                max={position.quantity}
+              />
+            </label>
+            <label className="block">
+              <span className="text-[10px] text-zinc-400 uppercase tracking-wider">
+                Price / unit
+              </span>
+              <input
+                type="number"
+                step="any"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                placeholder={
+                  position.current_price
+                    ? String(position.current_price)
+                    : "65000"
+                }
+                className="block w-full mt-0.5 bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none"
+                required
+              />
+            </label>
+          </div>
+          <label className="block">
+            <span className="text-[10px] text-zinc-400 uppercase tracking-wider">
+              Note (optional)
+            </span>
+            <input
+              type="text"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              maxLength={200}
+              placeholder="e.g. Ring-fenced 25% of gain"
+              className="block w-full mt-0.5 bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none"
+            />
+          </label>
+
+          {valid && (
+            <div className="rounded border border-zinc-800 bg-zinc-900/40 p-3 text-[11px] space-y-1">
+              <SummaryRow label="Proceeds" value={fmtUSD(proceeds)} />
+              <SummaryRow
+                label="Cost basis of lot"
+                value={fmtUSD(costLot)}
+                tone="text-zinc-400"
+              />
+              <SummaryRow
+                label="Realized PL"
+                value={fmtUSD(gain)}
+                tone={gain >= 0 ? "text-emerald-300" : "text-rose-300"}
+              />
+            </div>
+          )}
+
+          {err && (
+            <p className="text-[11px] text-rose-300 border border-rose-700/40 bg-rose-900/20 rounded px-2 py-1.5">
+              {err}
+            </p>
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-1.5 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs hover:bg-zinc-700"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={busy || !valid}
+              className="flex-1 py-1.5 rounded-md bg-emerald-500/20 border border-emerald-500/40 text-emerald-100 hover:bg-emerald-500/30 text-xs font-medium disabled:opacity-50"
+            >
+              {busy ? "Recording…" : "Record sale"}
+            </button>
+          </div>
+          <p className="text-[9px] text-zinc-600 leading-relaxed">
+            Tax figures use US federal + CO state defaults. Not tax advice.
+          </p>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function SummaryRow({
+  label,
+  value,
+  tone = "text-zinc-100",
+}: {
+  label: string;
+  value: string;
+  tone?: string;
+}) {
+  return (
+    <div className="flex justify-between">
+      <span className="text-zinc-500">{label}</span>
+      <span className={`tabular-nums ${tone}`}>{value}</span>
     </div>
   );
 }

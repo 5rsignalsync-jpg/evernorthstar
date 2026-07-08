@@ -144,6 +144,47 @@ def test_ring_fence_5x_gain_scenario():
     assert lock_75.net_pl_if_remainder_zero_usd == pytest.approx(200)  # +$200 locked
 
 
+# ---------------- Ring-fence tax fields ----------------
+
+def test_ring_fence_short_term_tax():
+    """Held <365 days → short-term rates (22% fed + 4.4% CO = 26.4%)."""
+    from datetime import datetime, timedelta
+    acquired = datetime.utcnow() - timedelta(days=30)  # bought 30 days ago
+    s = planning.compute_ring_fence_scenarios(
+        quantity=1.0, current_price=200.0, cost_basis_per_share=100.0,
+        position_acquired_at=acquired,
+    )
+    lock_25 = s[0]
+    assert lock_25.is_long_term is False
+    assert lock_25.tax_rate_applied_pct == pytest.approx(0.264)
+    assert lock_25.tax_owed_usd == pytest.approx(25 * 0.264)  # $6.60
+    assert lock_25.net_after_tax_usd == pytest.approx(25 - 25 * 0.264)  # $18.40
+
+
+def test_ring_fence_long_term_tax():
+    """Held ≥365 days → long-term rates (15% fed + 4.4% CO = 19.4%)."""
+    from datetime import datetime, timedelta
+    acquired = datetime.utcnow() - timedelta(days=400)  # bought 400 days ago
+    s = planning.compute_ring_fence_scenarios(
+        quantity=1.0, current_price=200.0, cost_basis_per_share=100.0,
+        position_acquired_at=acquired,
+    )
+    lock_50 = s[1]
+    assert lock_50.is_long_term is True
+    assert lock_50.tax_rate_applied_pct == pytest.approx(0.194)
+    assert lock_50.tax_owed_usd == pytest.approx(50 * 0.194)  # $9.70
+    assert lock_50.net_after_tax_usd == pytest.approx(50 - 50 * 0.194)
+
+
+def test_ring_fence_no_acquisition_defaults_to_short_term():
+    """No holding-period info → conservative short-term rate."""
+    s = planning.compute_ring_fence_scenarios(
+        quantity=1.0, current_price=200.0, cost_basis_per_share=100.0,
+    )
+    assert s[0].is_long_term is False
+    assert s[0].tax_rate_applied_pct == pytest.approx(0.264)
+
+
 # ---------------- Integration: build_position_plan ----------------
 
 def test_build_position_plan_no_history_returns_none(tmp_db):
