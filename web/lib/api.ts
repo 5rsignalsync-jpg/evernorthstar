@@ -639,6 +639,107 @@ export async function listCryptoRealizations(
   return res.json();
 }
 
+// ---------------- CCXT exchange auto-connect (Task #108) ----------------
+
+export type SupportedExchange = {
+  id: string;
+  label: string;
+  requires_passphrase: boolean;
+  note: string;
+};
+
+export type ExchangeConnection = {
+  id: number;
+  exchange_id: string;
+  exchange_label: string;
+  display_label: string;
+  status: string;
+  last_synced_at: string | null;
+  last_error: string | null;
+  positions_last_synced: number;
+  created_at: string;
+};
+
+export type ConnectExchangeInput = {
+  exchange_id: string;
+  display_label: string;
+  api_key: string;
+  api_secret: string;
+  passphrase?: string;
+};
+
+export type ConnectExchangeResponse = {
+  connection: ExchangeConnection;
+  positions_written: number;
+  disclaimer: string;
+};
+
+async function _postJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    let msg = `${res.status}`;
+    try {
+      const b = await res.json();
+      msg = typeof b?.detail === "string" ? b.detail : JSON.stringify(b);
+    } catch { /* keep status */ }
+    throw new Error(msg);
+  }
+  return res.json() as Promise<T>;
+}
+
+export async function listSupportedExchanges(): Promise<SupportedExchange[]> {
+  const res = await fetch(`${BASE}/portfolio/crypto/exchanges/supported`, {
+    credentials: "include",
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`List supported exchanges failed: ${res.status}`);
+  return res.json();
+}
+
+export async function connectExchange(
+  input: ConnectExchangeInput,
+): Promise<ConnectExchangeResponse> {
+  return _postJson<ConnectExchangeResponse>(
+    "/portfolio/crypto/exchanges/connect",
+    input,
+  );
+}
+
+export async function listExchangeConnections(): Promise<ExchangeConnection[]> {
+  const res = await fetch(`${BASE}/portfolio/crypto/exchanges`, {
+    credentials: "include",
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`List connections failed: ${res.status}`);
+  return res.json();
+}
+
+export async function syncExchangeConnection(
+  id: number,
+): Promise<ConnectExchangeResponse> {
+  return _postJson<ConnectExchangeResponse>(
+    `/portfolio/crypto/exchanges/${id}/sync`,
+    {},
+  );
+}
+
+export async function deleteExchangeConnection(id: number): Promise<void> {
+  const res = await fetch(`${BASE}/portfolio/crypto/exchanges/${id}`, {
+    method: "DELETE",
+    credentials: "include",
+    cache: "no-store",
+  });
+  if (!res.ok && res.status !== 204) {
+    throw new Error(`Delete connection failed: ${res.status}`);
+  }
+}
+
 export type HistoricalOutcome = {
   ticker: string;
   setup_date: string;

@@ -50,6 +50,10 @@ def _run_lightweight_migrations() -> None:
         ("users", "daily_digest_last_sent_at", "DATETIME"),
         # Sprint 3: zone_target alerts on the alert_rules table
         ("alert_rules", "zone_target", "VARCHAR"),
+        # Task 108 (CCXT): distinguish manual entries from synced ones so
+        # a sync of connection X only overwrites its own rows.
+        ("crypto_positions", "source", "VARCHAR NOT NULL DEFAULT 'manual'"),
+        ("crypto_positions", "connection_id", "INTEGER"),
     ]
     with _engine.begin() as conn:
         for table, col, ddl in additions:

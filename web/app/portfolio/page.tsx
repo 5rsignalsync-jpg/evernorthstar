@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { CryptoPositionsSection } from "@/components/CryptoPositionsSection";
+import { ExchangeConnectSection } from "@/components/ExchangeConnectSection";
 import { PlaidLinkButton } from "@/components/PlaidLinkButton";
 import { PlanningCard } from "@/components/PlanningCard";
 import {
@@ -48,6 +49,7 @@ function fmtDate(iso: string | null): string {
 
 export default function PortfolioPage() {
   const { user, loading: authLoading, isPro } = useAuth();
+  const [cryptoSectionKey, setCryptoSectionKey] = useState(0);
   const router = useRouter();
   const [data, setData] = useState<PortfolioResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -145,10 +147,24 @@ export default function PortfolioPage() {
           </p>
         )}
 
+        {/* Exchange auto-connect via CCXT. Mounts above manual entry so a
+            fresh user's first move is the auto-import path; manual entry is
+            the fallback for wallets we don't support natively. Sibling — a
+            successful connect triggers the manual section's refresh via
+            the shared /portfolio/crypto/positions API surface. */}
+        <ExchangeConnectSection
+          onConnectionsChanged={() => {
+            // CryptoPositionsSection polls listCryptoPositions on mount,
+            // but doesn't re-poll on sibling change. Force a full remount
+            // by bumping a key. Cheap and correct.
+            setCryptoSectionKey((k) => k + 1);
+          }}
+        />
+
         {/* Manual crypto positions — always shown for Pro users regardless
             of whether a brokerage is linked. This is the "all your crypto
             in one place" surface. */}
-        <CryptoPositionsSection />
+        <CryptoPositionsSection key={cryptoSectionKey} />
 
         {loading && !data ? (
           <p className="text-sm text-zinc-500">Loading brokerage holdings…</p>

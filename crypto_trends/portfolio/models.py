@@ -43,18 +43,23 @@ class BrokerageAccount(SQLModel, table=True):
 
 
 class CryptoPosition(SQLModel, table=True):
-    """A crypto position the user entered manually.
+    """A crypto position — manual entry OR CCXT-synced from an exchange.
 
-    Sprint 4 alternative to Plaid brokerage sync for crypto — Plaid's
-    Investments product doesn't cover crypto exchanges (Coinbase, Binance,
-    Kraken, etc.), so we let users type positions in directly. Cost basis
-    is per-unit; the frontend does the math for total cost / total value /
-    gain.
+    Sprint 4 was manual-only. CCXT integration adds `source` + optional
+    `connection_id` so a sync can rewrite its own positions without
+    clobbering the user's hand-entered ones. Rule:
 
-    Multiple rows with the same symbol are allowed — a user might hold
-    BTC on Coinbase AND on Kraken, or want to track separate lots for tax
-    purposes. `exchange_label` is a free-text field they can use to
-    distinguish ('Coinbase', 'Kraken', 'MetaMask', or blank).
+      - source='manual' rows are NEVER touched by sync.
+      - source='ccxt' rows are grouped by (user_id, connection_id) and
+        wholly replaced on each sync of that connection.
+
+    CCXT balance fetches give quantity but not cost basis — we set cost
+    basis to the current price at first sync (breakeven), and the user can
+    override via the Edit form later. Merlin has the same limitation.
+
+    `exchange_label` is a display string ('Coinbase', 'Kraken', 'MetaMask',
+    or blank) — for manual rows it's user-typed; for synced rows it's
+    populated from the connection's display name.
     """
     __tablename__ = "crypto_positions"
 
@@ -65,8 +70,40 @@ class CryptoPosition(SQLModel, table=True):
     cost_basis_per_share: float  # cost per unit; total_cost = quantity * this
     exchange_label: Optional[str] = None
     notes: Optional[str] = None
+    # CCXT integration — nullable to keep old rows valid.
+    source: str = Field(default="manual", index=True)  # 'manual' | 'ccxt'
+    connection_id: Optional[int] = Field(
+        default=None, foreign_key="crypto_exchange_connections.id", index=True
+    )
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class CryptoExchangeConnection(SQLModel, table=True):
+    """A user's read-only API-key connection to a crypto exchange via CCXT.
+
+    We only ever call `fetch_balance()` (read) — trading permissions are
+    a footgun and we communicate that loudly in the UI. Keys are Fernet-
+    encrypted at rest with the same secret used for Plaid access tokens.
+
+    `exchange_id` matches CCXT's exchange registry name ('coinbase',
+    'binanceus', 'kraken', etc.). Adding a new exchange = whitelist its
+    id + add it to the frontend picker; no per-exchange code needed.
+    """
+    __tablename__ = "crypto_exchange_connections"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    exchange_id: str = Field(index=True)  # 'coinbase' | 'binanceus' | ...
+    display_label: str  # user's nickname, e.g. "Coinbase (main)"
+    api_key_encrypted: str
+    api_secret_encrypted: str
+    passphrase_encrypted: Optional[str] = None  # some exchanges (coinbase pro, kucoin, okx)
+    status: str = Field(default="active", index=True)  # 'active' | 'error' | 'disabled'
+    last_synced_at: Optional[datetime] = None
+    last_error: Optional[str] = None
+    positions_last_synced: int = 0  # count of positions written on last sync
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class CryptoRealization(SQLModel, table=True):

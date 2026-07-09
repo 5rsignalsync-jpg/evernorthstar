@@ -20,7 +20,12 @@ from crypto_trends.auth.deps import require_pro
 from crypto_trends.auth.models import User, AlertRule
 from crypto_trends.portfolio import analysis, planning, plaid_client, sync
 from crypto_trends.portfolio.encryption import encrypt_token
-from crypto_trends.portfolio.models import BrokerageAccount, CryptoRealization, Holding
+from crypto_trends.portfolio.models import (
+    BrokerageAccount,
+    CryptoExchangeConnection,
+    CryptoRealization,
+    Holding,
+)
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 log = logging.getLogger(__name__)
@@ -965,3 +970,283 @@ def list_crypto_realizations(
     ).all()
     sym_by_id = {p.id: p.symbol for p in pos_rows}
     return [_realization_to_out(r, sym_by_id.get(r.position_id, "?")) for r in rows]
+
+
+# ---------------- CCXT crypto exchange connections (Task #108) ----------------
+
+from crypto_trends.portfolio import ccxt_sync
+from crypto_trends.portfolio.encryption import encrypt_token
+
+
+class SupportedExchangeOut(BaseModel):
+    id: str
+    label: str
+    requires_passphrase: bool
+    note: str
+
+
+@router.get("/crypto/exchanges/supported", response_model=list[SupportedExchangeOut])
+def list_supported_exchanges(
+    _: User = Depends(require_pro),
+) -> list[SupportedExchangeOut]:
+    """The whitelist of CCXT exchanges we support today. Grows over time."""
+    return [
+        SupportedExchangeOut(
+            id=ex_id,
+            label=meta["label"],
+            requires_passphrase=meta["requires_passphrase"],
+            note=meta["note"],
+        )
+        for ex_id, meta in ccxt_sync.SUPPORTED_EXCHANGES.items()
+    ]
+
+
+class ConnectExchangeIn(BaseModel):
+    exchange_id: str = Field(min_length=1, max_length=32)
+    display_label: str = Field(min_length=1, max_length=64)
+    api_key: str = Field(min_length=6, max_length=256)
+    api_secret: str = Field(min_length=6, max_length=512)
+    passphrase: Optional[str] = Field(default=None, max_length=256)
+
+
+class ConnectionOut(BaseModel):
+    id: int
+    exchange_id: str
+    exchange_label: str
+    display_label: str
+    status: str
+    last_synced_at: Optional[datetime]
+    last_error: Optional[str]
+    positions_last_synced: int
+    created_at: datetime
+
+
+def _connection_to_out(c: CryptoExchangeConnection) -> ConnectionOut:
+    meta = ccxt_sync.SUPPORTED_EXCHANGES.get(c.exchange_id, {})
+    return ConnectionOut(
+        id=c.id or 0,
+        exchange_id=c.exchange_id,
+        exchange_label=meta.get("label", c.exchange_id),
+        display_label=c.display_label,
+        status=c.status,
+        last_synced_at=c.last_synced_at,
+        last_error=c.last_error,
+        positions_last_synced=c.positions_last_synced,
+        created_at=c.created_at,
+    )
+
+
+class ConnectResponse(BaseModel):
+    connection: ConnectionOut
+    positions_written: int
+    disclaimer: str = (
+        "This connection uses your API key with 'read' permission. "
+        "EverNorthstar never trades, withdraws, or transfers. "
+        "Rotate or revoke the key any time from the exchange."
+    )
+
+
+def _apply_sync_result(
+    session: Session,
+    conn_row: CryptoExchangeConnection,
+    result: ccxt_sync.SyncResult,
+) -> int:
+    """Delete this connection's prior synced rows, insert fresh ones.
+    Returns the number of positions written."""
+    # Wipe just this connection's own rows — leaves manual rows and other
+    # connections' rows untouched.
+    prior = session.exec(
+        select(CryptoPosition).where(
+            CryptoPosition.user_id == conn_row.user_id,
+            CryptoPosition.source == "ccxt",
+            CryptoPosition.connection_id == conn_row.id,
+        )
+    ).all()
+    for p in prior:
+        session.delete(p)
+
+    written = 0
+    for bal in result.balances:
+        # Set cost basis to current price when we know it (breakeven) so
+        # unrealized PL is $0 until the user overrides. If we can't resolve
+        # a price, seed with 0 and let the UI show "no price data".
+        current_price = _current_price_for_crypto(bal.symbol) or 0.0
+        session.add(CryptoPosition(
+            user_id=conn_row.user_id,
+            symbol=bal.symbol,
+            quantity=bal.quantity,
+            cost_basis_per_share=current_price if current_price > 0 else 0.000001,
+            exchange_label=conn_row.display_label,
+            source="ccxt",
+            connection_id=conn_row.id,
+        ))
+        written += 1
+
+    conn_row.last_synced_at = datetime.utcnow()
+    conn_row.last_error = None
+    conn_row.status = "active"
+    conn_row.positions_last_synced = written
+    session.add(conn_row)
+    return written
+
+
+@router.post(
+    "/crypto/exchanges/connect",
+    response_model=ConnectResponse,
+    status_code=201,
+)
+def connect_exchange(
+    payload: ConnectExchangeIn,
+    user: User = Depends(require_pro),
+    session: Session = Depends(get_session),
+) -> ConnectResponse:
+    """Test + save a new exchange connection, then run first sync.
+
+    Idempotent per user + display_label — connecting the same label twice
+    replaces the prior connection (and its synced positions).
+    """
+    if payload.exchange_id not in ccxt_sync.SUPPORTED_EXCHANGES:
+        raise HTTPException(
+            422, f"Exchange '{payload.exchange_id}' is not supported yet."
+        )
+    meta = ccxt_sync.SUPPORTED_EXCHANGES[payload.exchange_id]
+    if meta["requires_passphrase"] and not payload.passphrase:
+        raise HTTPException(
+            422, f"{meta['label']} requires a passphrase. Add it and try again.",
+        )
+
+    # 1) Live-test the credentials BEFORE storing anything.
+    result = ccxt_sync.test_connection(
+        exchange_id=payload.exchange_id,
+        api_key=payload.api_key,
+        api_secret=payload.api_secret,
+        passphrase=payload.passphrase,
+    )
+    if not result.ok:
+        raise HTTPException(400, result.error or "Connection failed.")
+
+    # 2) Replace any prior connection with the same display_label for this user.
+    prior_conn = session.exec(
+        select(CryptoExchangeConnection)
+        .where(
+            CryptoExchangeConnection.user_id == user.id,
+            CryptoExchangeConnection.display_label == payload.display_label,
+        )
+    ).first()
+    if prior_conn is not None:
+        # Cascade-delete its synced positions to keep the ledger consistent.
+        prior_positions = session.exec(
+            select(CryptoPosition).where(
+                CryptoPosition.source == "ccxt",
+                CryptoPosition.connection_id == prior_conn.id,
+            )
+        ).all()
+        for p in prior_positions:
+            session.delete(p)
+        session.delete(prior_conn)
+        session.commit()
+
+    # 3) Store encrypted + insert the position rows.
+    new_conn = CryptoExchangeConnection(
+        user_id=user.id or 0,
+        exchange_id=payload.exchange_id,
+        display_label=payload.display_label.strip(),
+        api_key_encrypted=encrypt_token(payload.api_key),
+        api_secret_encrypted=encrypt_token(payload.api_secret),
+        passphrase_encrypted=(
+            encrypt_token(payload.passphrase) if payload.passphrase else None
+        ),
+        status="active",
+    )
+    session.add(new_conn)
+    session.commit()
+    session.refresh(new_conn)
+
+    written = _apply_sync_result(session, new_conn, result)
+    session.commit()
+    session.refresh(new_conn)
+
+    return ConnectResponse(
+        connection=_connection_to_out(new_conn),
+        positions_written=written,
+    )
+
+
+@router.get("/crypto/exchanges", response_model=list[ConnectionOut])
+def list_exchange_connections(
+    user: User = Depends(require_pro),
+    session: Session = Depends(get_session),
+) -> list[ConnectionOut]:
+    rows = session.exec(
+        select(CryptoExchangeConnection)
+        .where(CryptoExchangeConnection.user_id == user.id)
+        .order_by(CryptoExchangeConnection.created_at.desc())
+    ).all()
+    return [_connection_to_out(c) for c in rows]
+
+
+@router.post(
+    "/crypto/exchanges/{conn_id}/sync",
+    response_model=ConnectResponse,
+)
+def sync_exchange_connection(
+    conn_id: int,
+    user: User = Depends(require_pro),
+    session: Session = Depends(get_session),
+) -> ConnectResponse:
+    """Refresh balances for one stored connection."""
+    conn_row = session.get(CryptoExchangeConnection, conn_id)
+    if conn_row is None or conn_row.user_id != user.id:
+        raise HTTPException(404, "Connection not found.")
+
+    result = ccxt_sync.sync_connection(
+        connection_id=conn_id,
+        exchange_id=conn_row.exchange_id,
+        api_key_encrypted=conn_row.api_key_encrypted,
+        api_secret_encrypted=conn_row.api_secret_encrypted,
+        passphrase_encrypted=conn_row.passphrase_encrypted,
+    )
+
+    if not result.ok:
+        conn_row.status = "error"
+        conn_row.last_error = result.error
+        session.add(conn_row)
+        session.commit()
+        session.refresh(conn_row)
+        raise HTTPException(
+            502, result.error or "Sync failed. Check API key permissions."
+        )
+
+    written = _apply_sync_result(session, conn_row, result)
+    session.commit()
+    session.refresh(conn_row)
+    return ConnectResponse(
+        connection=_connection_to_out(conn_row),
+        positions_written=written,
+    )
+
+
+@router.delete(
+    "/crypto/exchanges/{conn_id}",
+    status_code=204,
+)
+def delete_exchange_connection(
+    conn_id: int,
+    user: User = Depends(require_pro),
+    session: Session = Depends(get_session),
+) -> None:
+    """Remove a connection AND its synced positions. Manual positions with
+    the same symbol are untouched."""
+    conn_row = session.get(CryptoExchangeConnection, conn_id)
+    if conn_row is None or conn_row.user_id != user.id:
+        raise HTTPException(404, "Connection not found.")
+    prior_positions = session.exec(
+        select(CryptoPosition).where(
+            CryptoPosition.source == "ccxt",
+            CryptoPosition.connection_id == conn_id,
+        )
+    ).all()
+    for p in prior_positions:
+        session.delete(p)
+    session.delete(conn_row)
+    session.commit()
