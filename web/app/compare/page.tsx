@@ -1,34 +1,34 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-// Public comparison landing for anyone Googling "Merlin alternative",
-// "Merlin Investor vs", "Merlin Crypto vs", "Merlin exit targets", etc.
-// The tone is confident + specific. Every Merlin claim is cited to a
-// public source (their tutorials, their marketing site, their 3-step
-// onboarding). We never overstate — undocumented ≠ nonexistent, and we
-// say so at the bottom.
+// Public comparison landing. Deliberately does NOT name the competitor —
+// the comparison is factual and specific enough for readers to know who
+// we mean, but staying generic keeps us out of trademark disputes and
+// out of Google's "trademark competitor bidding" gray area. Every claim
+// is still traceable to a public source (onboarding emails, tutorial
+// timestamps, subscription pages) so the honesty holds.
 
 export const metadata: Metadata = {
-  title: "EverNorthstar vs Merlin — the honest comparison | EverNorthstar",
+  title: "How EverNorthstar compares to the top crypto planners | EverNorthstar",
   description:
-    "Merlin makes you draw Fibonacci retracements on TradingView and type the numbers into a spreadsheet. EverNorthstar auto-computes zones, entry ladders, and profit-taking scenarios — plus AI plan summaries and historical outcome distributions. Feature-by-feature head-to-head.",
+    "Most crypto planners are portfolio trackers with price alerts on targets you draw yourself in TradingView. EverNorthstar auto-computes zones, entry ladders, and profit-taking scenarios — plus AI plan summaries and historical outcome distributions. Feature-by-feature.",
   openGraph: {
-    title: "EverNorthstar vs Merlin — the honest comparison",
+    title: "How EverNorthstar compares to the top crypto planners",
     description:
-      "Everything Merlin does + the analysis Merlin makes you do on TradingView. Feature-by-feature.",
-    url: "https://evernorthstar.app/vs-merlin",
+      "Everything the top competitor does + the analysis they make you do on TradingView. Feature-by-feature.",
+    url: "https://evernorthstar.app/compare",
     siteName: "EverNorthstar",
     type: "website",
   },
   alternates: {
-    canonical: "https://evernorthstar.app/vs-merlin",
+    canonical: "https://evernorthstar.app/compare",
   },
 };
 
 type Row = {
   category: string;
   feature: string;
-  merlin: "yes" | "no" | "partial" | "manual";
+  competitor: "yes" | "no" | "partial" | "manual";
   us: "yes" | "no" | "partial" | "manual";
   detail: string;
 };
@@ -37,55 +37,55 @@ const ROWS: Row[] = [
   {
     category: "Exit targets",
     feature: "Auto-computed price targets",
-    merlin: "no",
+    competitor: "no",
     us: "yes",
     detail:
-      "Merlin's masterclass sends you to TradingView to draw Fibonacci retracement lines by hand, then type the numbers back into Merlin. EverNorthstar computes accumulation + distribution price bands automatically using an RSI + Bollinger + score-percentile + volume-divergence ensemble.",
+      "The top competitor's flagship tutorial walks users through drawing Fibonacci retracement lines by hand in TradingView, then typing the numbers back into their app. EverNorthstar computes accumulation + distribution price bands automatically using an RSI + Bollinger + score-percentile + volume-divergence ensemble.",
   },
   {
     category: "Exit targets",
     feature: "Multi-indicator zone detection",
-    merlin: "no",
+    competitor: "no",
     us: "yes",
     detail:
-      "Named zones (accumulation / neutral / distribution / caution) with a confidence score. Merlin uses Fibonacci retracement only — a technique where two traders can draw two different lines and get two different answers.",
+      "Named zones (accumulation / neutral / distribution / caution) with a confidence score. The top competitor relies on Fibonacci retracement only — a technique where two traders can draw two different lines and get two different answers.",
   },
   {
     category: "Position planning",
     feature: "Entry ladder (starter / core / deep)",
-    merlin: "no",
+    competitor: "no",
     us: "yes",
     detail:
-      "Not documented in Merlin's tutorials. EverNorthstar splits your budget 30/35/35% across three accumulation-band price levels with an invalidation level below the band floor.",
+      "Not documented in the top competitor's tutorials. EverNorthstar splits your budget 30/35/35% across three accumulation-band price levels with an invalidation level below the band floor.",
   },
   {
     category: "Position planning",
     feature: "Ring-fence profit-taking rules",
-    merlin: "no",
+    competitor: "no",
     us: "yes",
     detail:
-      "Not documented in Merlin. EverNorthstar shows 25/50/75%-of-gain scenarios with dollar amounts, net-PL-if-remainder-zero worst case, plus tax-adjusted net after federal + state.",
+      "Not documented in the top competitor's product. EverNorthstar shows 25/50/75%-of-gain scenarios with dollar amounts, net-PL-if-remainder-zero worst case, plus tax-adjusted net after federal + state.",
   },
   {
     category: "Analysis depth",
     feature: "Historical outcome lookup",
-    merlin: "no",
+    competitor: "no",
     us: "yes",
     detail:
-      "Not documented in Merlin. EverNorthstar searches 2 years of history for bars in the same zone as your setup and returns the distribution of forward returns (p25 / median / p75, 30d + 90d).",
+      "Not documented in the top competitor's product. EverNorthstar searches 2 years of history for bars in the same zone as your setup and returns the distribution of forward returns (p25 / median / p75, 30d + 90d).",
   },
   {
     category: "Analysis depth",
     feature: "AI plan summary",
-    merlin: "no",
+    competitor: "no",
     us: "yes",
     detail:
-      "No AI feature appears in Merlin's tutorial library. EverNorthstar summarizes any plan with Claude Haiku — plain-English descriptive framing, never prescriptive (publisher-exemption safe).",
+      "No AI feature appears in the top competitor's tutorial library. EverNorthstar summarizes any plan with Claude Haiku — plain-English descriptive framing, never prescriptive (publisher-exemption safe).",
   },
   {
     category: "Analysis depth",
     feature: "Ask Why (LLM explains a ticker's move)",
-    merlin: "no",
+    competitor: "no",
     us: "yes",
     detail:
       "Only in EverNorthstar. Any ranked ticker → one-click Claude explanation of the price action + news catalysts + smart-money context.",
@@ -93,7 +93,7 @@ const ROWS: Row[] = [
   {
     category: "Analysis depth",
     feature: "Smart Money — Congress + 13F + Insider",
-    merlin: "no",
+    competitor: "no",
     us: "yes",
     detail:
       "Only in EverNorthstar. Composite score from Pelosi Tracker, institutional 13F holdings, and insider Form 4 filings.",
@@ -101,31 +101,31 @@ const ROWS: Row[] = [
   {
     category: "Portfolio tracking",
     feature: "Auto-connect crypto exchanges",
-    merlin: "yes",
+    competitor: "yes",
     us: "yes",
     detail:
-      "Merlin supports 5 exchanges (Coinbase, Binance.US, Kraken, Gemini, Uphold). EverNorthstar supports 7 today (Coinbase, Binance.US, Kraken, Gemini, KuCoin, Bybit, OKX) via CCXT — adding new ones is a one-line whitelist. Both use read-only API keys.",
+      "The top competitor supports 5 exchanges. EverNorthstar supports 7 today (Coinbase, Binance.US, Kraken, Gemini, KuCoin, Bybit, OKX) via CCXT — adding new ones is a one-line whitelist. Both use read-only API keys.",
   },
   {
     category: "Portfolio tracking",
     feature: "Wallet connect (Ledger / MetaMask / Atomic)",
-    merlin: "yes",
+    competitor: "yes",
     us: "no",
     detail:
-      "Merlin supports Ledger, MetaMask, and Atomic Wallet imports. EverNorthstar doesn't yet — on the roadmap.",
+      "The top competitor supports Ledger, MetaMask, and Atomic Wallet imports. EverNorthstar doesn't yet — on the roadmap.",
   },
   {
     category: "Portfolio tracking",
     feature: "Auto-connect brokerages (Fidelity / Schwab / etc.)",
-    merlin: "no",
+    competitor: "no",
     us: "yes",
     detail:
-      "Merlin is crypto-only. EverNorthstar syncs 10,000+ US institutions via Plaid — brokerages, banks, retirement accounts.",
+      "The top competitor is crypto-only. EverNorthstar syncs 10,000+ US institutions via Plaid — brokerages, banks, retirement accounts.",
   },
   {
     category: "Tax + realizations",
     feature: "Tax estimation on planned exits",
-    merlin: "yes",
+    competitor: "yes",
     us: "yes",
     detail:
       "Both show estimated tax on target hits. EverNorthstar auto-detects long-term vs short-term from holding period; defaults to US federal + Colorado state rates (configurable).",
@@ -133,7 +133,7 @@ const ROWS: Row[] = [
   {
     category: "Tax + realizations",
     feature: "Mark-as-sold flow + realized-PL ledger",
-    merlin: "yes",
+    competitor: "yes",
     us: "yes",
     detail:
       "Both record realizations with quantity, price, and net after tax. EverNorthstar keeps an immutable per-sale ledger with LT/ST badges.",
@@ -141,7 +141,7 @@ const ROWS: Row[] = [
   {
     category: "Alerts",
     feature: "Price alerts",
-    merlin: "yes",
+    competitor: "yes",
     us: "yes",
     detail:
       "Both. EverNorthstar adds zone-target alerts ('when BTC enters distribution') and score-threshold alerts.",
@@ -149,45 +149,45 @@ const ROWS: Row[] = [
   {
     category: "Signals + rankings",
     feature: "Ranked long/short candidates (not just tracker)",
-    merlin: "no",
+    competitor: "no",
     us: "yes",
     detail:
-      "Only in EverNorthstar. 5 sleeves scored daily (crypto, crypto micro, large caps, penny stocks, long-term). Not in Merlin's product surface.",
+      "Only in EverNorthstar. 5 sleeves scored daily (crypto, crypto micro, large caps, penny stocks, long-term). Not in the top competitor's product surface.",
   },
   {
     category: "Signals + rankings",
     feature: "Curated strategy baskets",
-    merlin: "no",
+    competitor: "no",
     us: "yes",
     detail:
-      "10 curated strategies (Nancy Pelosi Tracker, Kongressional Conviction, Congressional Buys, insider composite, and more) with full position baskets + backtested returns.",
+      "10 curated strategies (Pelosi Tracker, Kongressional Conviction, insider composite, and more) with full position baskets + backtested returns.",
   },
   {
     category: "Backtesting",
     feature: "Backtested strategy returns visualization",
-    merlin: "partial",
+    competitor: "partial",
     us: "yes",
     detail:
-      "Merlin has strategy backtests per third-party listings; not documented in their public tutorials. EverNorthstar ships walk-forward backtests + returns visualization on every strategy card.",
+      "The top competitor has backtests per third-party listings but doesn't document them publicly. EverNorthstar ships walk-forward backtests + returns visualization on every strategy card.",
   },
   {
     category: "Platform",
     feature: "Web app",
-    merlin: "yes",
+    competitor: "yes",
     us: "yes",
     detail: "Both.",
   },
   {
     category: "Platform",
     feature: "Native mobile app (iOS + Android)",
-    merlin: "yes",
+    competitor: "yes",
     us: "no",
     detail:
-      "Merlin has iOS + Android with synced state. EverNorthstar is web-only today (mobile-responsive) — native app on the roadmap.",
+      "The top competitor has iOS + Android with synced state. EverNorthstar is web-only today (mobile-responsive) — native app on the roadmap.",
   },
 ];
 
-function Cell({ v }: { v: Row["merlin"] }) {
+function Cell({ v }: { v: Row["competitor"] }) {
   if (v === "yes")
     return (
       <span className="inline-flex items-center gap-1 text-emerald-300 text-xs font-semibold">
@@ -225,7 +225,7 @@ const CATEGORIES = [
   "Platform",
 ];
 
-export default function VsMerlinPage() {
+export default function ComparePage() {
   const rowsByCategory = CATEGORIES.map((c) => ({
     category: c,
     rows: ROWS.filter((r) => r.category === c),
@@ -236,15 +236,15 @@ export default function VsMerlinPage() {
       {/* Hero */}
       <section className="max-w-4xl mx-auto px-6 pt-16 pb-8">
         <p className="text-xs text-emerald-400 uppercase tracking-widest mb-3">
-          Honest head-to-head
+          Honest comparison
         </p>
         <h1 className="text-3xl md:text-5xl font-semibold tracking-tight mb-4">
-          EverNorthstar vs Merlin
+          How we compare to the top crypto planner
         </h1>
         <p className="text-lg md:text-xl text-zinc-300 leading-relaxed mb-6">
-          Merlin makes you draw Fibonacci retracements on TradingView and type
-          the numbers back into a spreadsheet. EverNorthstar computes zones,
-          entry ladders, and profit-taking scenarios{" "}
+          Most crypto planners are portfolio trackers with alerts on targets
+          you drew yourself in TradingView. EverNorthstar computes zones, entry
+          ladders, and profit-taking scenarios{" "}
           <span className="text-emerald-300">automatically</span> — plus
           historical outcome distributions and AI plan summaries.
         </p>
@@ -264,11 +264,12 @@ export default function VsMerlinPage() {
         </div>
       </section>
 
-      {/* Merlin's own admission */}
+      {/* Competitor's own admission */}
       <section className="max-w-4xl mx-auto px-6 pb-10">
         <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-5">
           <p className="text-xs text-zinc-500 uppercase tracking-wider mb-3">
-            Merlin&apos;s own product summary, from their onboarding email
+            The top competitor&apos;s own product summary, from their onboarding
+            email
           </p>
           <ol className="text-sm text-zinc-300 space-y-1 mb-4">
             <li>
@@ -277,21 +278,20 @@ export default function VsMerlinPage() {
             </li>
             <li>
               <span className="text-emerald-400 font-semibold">2.</span> Visit
-              Assets page to view your portfolio balances &amp; values
+              the assets page to view portfolio balances &amp; values
             </li>
             <li>
               <span className="text-emerald-400 font-semibold">3.</span> Create
-              an Exit Strategy to receive alerts when your targets are reached
+              an exit strategy to receive alerts when your targets are reached
             </li>
           </ol>
           <p className="text-xs text-zinc-500 leading-relaxed">
             That&apos;s the whole product. The targets in step 3 come from{" "}
-            <em>you</em> — Merlin&apos;s 26-minute &ldquo;How to Choose Exit
-            Targets&rdquo; masterclass walks you through drawing Fibonacci
-            retracement in a free TradingView account (timestamp 10:23), picking
-            key fib levels (13:01), and entering them into a spreadsheet before
-            typing them into Merlin (13:58). Merlin&apos;s role is storage +
-            alerts + tax estimation on numbers you already picked yourself.
+            <em>you</em> — their 26-minute exit-targets masterclass walks you
+            through drawing Fibonacci retracement in a free TradingView account,
+            picking key fib levels, and entering them into a spreadsheet before
+            typing them into the app. The competitor&apos;s role is storage,
+            alerts, and tax estimation on numbers you already picked yourself.
           </p>
         </div>
       </section>
@@ -302,9 +302,8 @@ export default function VsMerlinPage() {
           What our engine actually outputs — real data, right now
         </h2>
         <p className="text-sm text-zinc-400 mb-4">
-          Below is a live reading from our production zone engine for Solana,
-          taken at scale from real Binance hourly bars. No cherry-picking, no
-          demo mode.
+          A live reading from our production zone engine for Solana, taken from
+          real Binance hourly bars. No cherry-picking, no demo mode.
         </p>
         <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-5 font-mono text-xs">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -331,8 +330,8 @@ export default function VsMerlinPage() {
           </p>
         </div>
         <p className="text-xs text-zinc-500 mt-3 italic">
-          This is the analysis Merlin makes users do on TradingView with a
-          Fibonacci tool.
+          This is the analysis the competitor asks users to do themselves on
+          TradingView with a Fibonacci tool.
         </p>
       </section>
 
@@ -354,7 +353,7 @@ export default function VsMerlinPage() {
                       Feature
                     </th>
                     <th className="text-center py-2 px-2 font-normal w-24">
-                      Merlin
+                      Top competitor
                     </th>
                     <th className="text-center py-2 px-2 font-normal w-24">
                       EverNorthstar
@@ -372,7 +371,7 @@ export default function VsMerlinPage() {
                         {r.feature}
                       </td>
                       <td className="py-3 px-2 text-center">
-                        <Cell v={r.merlin} />
+                        <Cell v={r.competitor} />
                       </td>
                       <td className="py-3 px-2 text-center">
                         <Cell v={r.us} />
@@ -396,8 +395,8 @@ export default function VsMerlinPage() {
             The honest one-line summary
           </h2>
           <p className="text-sm text-zinc-200 leading-relaxed mb-3">
-            <strong className="text-emerald-300">Merlin</strong> is a
-            wide-and-shallow crypto tracker with alerts on user-typed prices.
+            <strong className="text-emerald-300">The top competitor</strong> is
+            a wide-and-shallow crypto tracker with alerts on user-typed prices.
           </p>
           <p className="text-sm text-zinc-200 leading-relaxed mb-4">
             <strong className="text-emerald-300">EverNorthstar</strong> is
@@ -407,9 +406,9 @@ export default function VsMerlinPage() {
             <em>for you</em> instead of by you.
           </p>
           <p className="text-sm text-zinc-400 leading-relaxed">
-            If you like Merlin&apos;s Fibonacci-on-TradingView workflow, keep
-            using it — it&apos;s a valid approach. If you&apos;d rather have
-            the computation done for you, EverNorthstar is here.
+            If the Fibonacci-on-TradingView workflow works for you, keep using
+            it — it&apos;s a valid approach. If you&apos;d rather have the
+            computation done for you, EverNorthstar is here.
           </p>
         </div>
       </section>
@@ -422,14 +421,17 @@ export default function VsMerlinPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-5">
             <p className="text-xs uppercase tracking-wider text-zinc-500 mb-2">
-              Merlin
+              Top competitor
             </p>
             <ul className="text-sm text-zinc-300 space-y-1.5">
-              <li>Camelot — free (2 portfolios, 10 assets)</li>
-              <li>Lancelot — $13.49–14.99/mo (5 portfolios, unlimited assets)</li>
-              <li>Excalibur — $26.99–29.99/mo (10 portfolios)</li>
-              <li>King Arthur — $44.99–49.99/mo (unlimited)</li>
+              <li>Free tier (~2 portfolios, ~10 assets)</li>
+              <li>Entry paid tier — $13.49–14.99/mo</li>
+              <li>Mid tier — $26.99–29.99/mo</li>
+              <li>Top tier — $44.99–49.99/mo</li>
             </ul>
+            <p className="text-[10px] text-zinc-500 mt-3 leading-relaxed">
+              Feature gates by portfolio count + import count.
+            </p>
           </div>
           <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-5">
             <p className="text-xs uppercase tracking-wider text-emerald-300 mb-2">
@@ -461,7 +463,7 @@ export default function VsMerlinPage() {
             Try it in parallel with your current setup
           </h2>
           <p className="text-sm text-zinc-400 mb-5 leading-relaxed max-w-lg mx-auto">
-            You don&apos;t need to leave Merlin to see if this works better for
+            You don&apos;t need to change tools to see if this works better for
             you. Sign up free, connect one exchange, run one plan on your
             biggest bag, and compare.
           </p>
@@ -477,40 +479,30 @@ export default function VsMerlinPage() {
       {/* Sources */}
       <section className="max-w-4xl mx-auto px-6 pb-16 text-[11px] text-zinc-500">
         <p className="uppercase tracking-wider text-zinc-500 mb-2">
-          Sources for Merlin claims
+          Sources for competitor claims
         </p>
         <ul className="space-y-1 leading-relaxed">
           <li>
-            Merlin&apos;s 3-step product summary — the &ldquo;Get Started
-            Quickly&rdquo; onboarding slide sent to every new signup.
+            All comparison points are drawn from the competitor&apos;s own
+            public product materials — their onboarding emails, tutorial video
+            library, exit-target masterclass, supported-integration walkthroughs,
+            and public subscription page.
           </li>
           <li>
-            Merlin&apos;s exit-target methodology — the 26:26 &ldquo;How to
-            Choose Exit Targets&rdquo; masterclass by founder Johnny Krypto,
-            with chapters covering TradingView + Fibonacci setup (10:23),
-            spreadsheet target entry (13:58), and the Merlin sync (18:53).
+            Where a competitor feature exists but isn&apos;t publicly
+            documented, we marked it &ldquo;partial&rdquo; rather than
+            &ldquo;no&rdquo;. Undocumented is not the same as nonexistent.
           </li>
           <li>
-            Merlin&apos;s supported integrations — their public
-            &ldquo;How-To&rdquo; video library lists Uphold, Binance.US,
-            Coinbase, Kraken, Gemini, Atomic Wallet, Ledger, and MetaMask.
-          </li>
-          <li>
-            Merlin pricing — tier structure and pricing bands from their public
-            subscriptions page.
-          </li>
-          <li>
-            Where a Merlin feature exists but isn&apos;t publicly documented, we
-            marked it &ldquo;partial&rdquo; rather than &ldquo;no&rdquo;.
-            Undocumented is not the same as nonexistent.
+            Pricing bands cited from the public subscription page as of the last
+            update to this page.
           </li>
         </ul>
         <p className="mt-6 text-zinc-600 text-[10px] leading-relaxed">
-          Merlin is a trademark of its owner. EverNorthstar is a product of
-          5Royals Investments LLC and is not affiliated with, endorsed by, or
-          sponsored by Merlin. This comparison reflects each product&apos;s
-          publicly available information as of the date this page was last
-          updated.
+          EverNorthstar is a product of 5Royals Investments LLC. We are not
+          affiliated with, endorsed by, or sponsored by any product referenced
+          on this page. Comparisons reflect publicly available information as
+          of the last update.
         </p>
       </section>
     </main>
