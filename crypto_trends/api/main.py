@@ -71,9 +71,24 @@ app.add_middleware(
 
 @app.on_event("startup")
 def _startup() -> None:
+    from crypto_trends.logging_config import configure as configure_logging
+    from crypto_trends.scheduler import start_scheduler
     from crypto_trends.startup_checks import assert_production_ready
+    # Wire root logger to stderr so scheduler / refresh subprocess output is
+    # visible in `flyctl logs`. Without this, library loggers are silent.
+    configure_logging()
     assert_production_ready()
     init_users_db()
+    # Intraday crypto refresh fires every 15 min from inside this process so
+    # it writes to the same DuckDB the API reads. Needs min_machines_running=1
+    # in fly.toml so the scheduler isn't napped by auto-stop.
+    start_scheduler()
+
+
+@app.on_event("shutdown")
+def _shutdown() -> None:
+    from crypto_trends.scheduler import stop_scheduler
+    stop_scheduler()
 
 
 app.include_router(auth_router)

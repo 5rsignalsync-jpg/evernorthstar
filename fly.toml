@@ -26,7 +26,10 @@ primary_region = "iad"   # Ashburn VA, low-latency to most US users
   force_https = true
   auto_stop_machines = "stop"     # halt when idle to save money
   auto_start_machines = true       # wake on first request (~1-2s cold start)
-  min_machines_running = 0         # truly 0 when idle = $0 compute
+  min_machines_running = 1         # one machine always on so the in-process
+                                   # intraday-crypto scheduler can fire every
+                                   # 15 min (see crypto_trends/scheduler.py).
+                                   # ~$2/mo vs the ~$0-3 of scale-to-zero.
   processes = ["app"]
 
   [http_service.concurrency]

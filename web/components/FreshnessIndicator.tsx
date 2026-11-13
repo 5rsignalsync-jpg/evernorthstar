@@ -70,12 +70,12 @@ export function FreshnessIndicator() {
           <ul className="text-[11px] divide-y divide-zinc-800">
             {data.asset_classes.map((ac) => {
               const isEquity = ac.asset_class.startsWith("equity");
-              // Crypto has an intraday cron aiming for 15-min cadence, but
-              // GitHub-Actions scheduled jobs sometimes queue for 30-90 min
-              // on the free tier. 90 min covers the realistic p95 without
-              // false alarms; we tighten this if we migrate to Fly Scheduled
-              // Machines for real deterministic cron.
-              const greenMax = isEquity ? 24 * 3600 : 90 * 60;
+              // Crypto refresh fires every 15 min from the in-process
+              // APScheduler on the Fly primary machine (see
+              // crypto_trends/scheduler.py). 30 min is 2x the cadence —
+              // anything older than that is a real refresh miss, not
+              // scheduler jitter.
+              const greenMax = isEquity ? 24 * 3600 : 30 * 60;
               const amberMax = isEquity ? 5 * 86400 : 6 * 3600;
               const age = ac.age_seconds === null ? Infinity : Math.max(0, ac.age_seconds);
               const acSev: "green" | "amber" | "red" =
