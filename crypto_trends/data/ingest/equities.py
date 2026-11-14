@@ -88,7 +88,15 @@ def _filter_penny(by_ticker: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]
 
 
 def _to_long(by_ticker: dict[str, pd.DataFrame], asset_class: str) -> pd.DataFrame:
-    """Convert {ticker: ohlcv_df} to a long-format DataFrame matching ohlcv schema."""
+    """Convert {ticker: ohlcv_df} to a long-format DataFrame matching ohlcv schema.
+
+    Drops rows with ANY missing OHLCV field — yfinance started returning
+    partial rows for some tickers (empty `open` on days when the ticker
+    didn't trade, or on new listings before the first open print). These
+    partial rows violate the `ohlcv.open NOT NULL` constraint on insert
+    and used to crash the whole equity refresh. Filtering here is cheap
+    and defensive.
+    """
     rows = []
     for t, df in by_ticker.items():
         # yfinance names the index "Date" for daily but may use "Datetime" or be
@@ -108,6 +116,15 @@ def _to_long(by_ticker: dict[str, pd.DataFrame], asset_class: str) -> pd.DataFra
         df["source"] = "yfinance"
         df["asset_class"] = asset_class
         df["quote_volume"] = df["close"] * df["volume"]
+        # Drop rows where ANY required OHLCV field is NaN (not just all).
+        # Volume=0 is OK (halted trading days), but None violates constraints.
+        before = len(df)
+        df = df.dropna(subset=["open", "high", "low", "close", "volume"])
+        if len(df) < before:
+            log.info("dropped %d partial-row(s) for %s (missing OHLCV field)",
+                     before - len(df), t)
+        if df.empty:
+            continue
         rows.append(df[["symbol", "ts", "interval", "asset_class",
                         "open", "high", "low", "close", "volume",
                         "quote_volume", "source"]])
@@ -143,6 +160,18 @@ def upsert_universe(tickers: list[str], asset_class: str, ranks: dict[str, int])
 
 
 def upsert_ohlcv(df: pd.DataFrame) -> int:
+    if df.empty:
+        return 0
+    # Defensive final filter — a single NaN in any required column will
+    # blow up the whole bulk insert with "NOT NULL constraint failed" and
+    # strand all the other rows. Callers (like _to_long) already filter,
+    # but this is cheap second-line protection.
+    required = ["open", "high", "low", "close", "volume"]
+    before = len(df)
+    df = df.dropna(subset=required)
+    if len(df) < before:
+        log.warning("upsert_ohlcv: dropped %d row(s) with missing OHLCV at insert boundary",
+                    before - len(df))
     if df.empty:
         return 0
     with connect() as conn:
