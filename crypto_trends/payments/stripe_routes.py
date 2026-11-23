@@ -83,6 +83,14 @@ def create_checkout_session(
             client_reference_id=str(user.id),
             customer=customer_id or None,
             customer_email=user.email if not customer_id else None,
+            # allow_promotion_codes=True is what powers the $2-first-month
+            # launch coupon (and any future discount codes): Stripe renders
+            # an "Add promotion code" field on the Checkout page. Users
+            # type the promo code we display on the pricing page; Stripe
+            # applies the discount against the subscription's first invoice
+            # (duration=once on the coupon side keeps month 2+ at full price).
+            # To create or rotate codes: Stripe Dashboard → Products →
+            # Coupons / Promotion codes. No code change needed here.
             allow_promotion_codes=True,
             metadata={"user_id": str(user.id), "plan": body.plan},
         )

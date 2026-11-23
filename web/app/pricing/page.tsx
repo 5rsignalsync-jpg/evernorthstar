@@ -191,7 +191,7 @@ export default function PricingPage() {
           {/* Pro */}
           <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-6 relative">
             <div className="absolute -top-2 right-4 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-200">
-              Recommended
+              $2 first month
             </div>
             <div className="flex items-baseline justify-between mb-3">
               <h2 className="text-xl font-semibold">Pro</h2>
@@ -204,6 +204,25 @@ export default function PricingPage() {
                 </div>
               </div>
             </div>
+
+            {/* Launch promo banner — Stripe coupon created in dashboard
+                with amount_off=$17, duration=once. User types the code on
+                Checkout page; first invoice drops from $19 to $2. Month 2+
+                bills full price. Yearly plan not discounted (promo intent
+                is to lower month-1 friction, not year-1 commitment). */}
+            <div className="mb-4 rounded border border-emerald-500/50 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="font-semibold">🎟️ Launch promo — $2 first month</span>
+                <code className="font-mono bg-black/40 px-2 py-0.5 rounded border border-emerald-500/40 text-emerald-200 tracking-widest">
+                  LAUNCH2
+                </code>
+              </div>
+              <p className="text-[11px] text-emerald-200/80 mt-1 leading-snug">
+                Enter <code className="text-emerald-300">LAUNCH2</code> at checkout. First month is $2,
+                then $19/mo. Cancel anytime from Account.
+              </p>
+            </div>
+
             <p className="text-sm text-zinc-300 mb-4">
               Everything in Free, plus the rest of the dashboard.
             </p>
@@ -230,7 +249,7 @@ export default function PricingPage() {
                 >
                   {loading === "monthly"
                     ? "Redirecting to Stripe…"
-                    : "Subscribe · $19 / month"}
+                    : "Start Pro · $19/mo (use LAUNCH2 for $2 first month)"}
                 </button>
                 <button
                   type="button"
@@ -240,7 +259,7 @@ export default function PricingPage() {
                 >
                   {loading === "annual"
                     ? "Redirecting to Stripe…"
-                    : "Subscribe · $190 / year (save 17%)"}
+                    : "Go annual · $190/yr (save 17%)"}
                 </button>
                 <button
                   type="button"
