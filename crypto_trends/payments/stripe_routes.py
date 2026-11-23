@@ -99,18 +99,27 @@ class FounderCheckoutResponse(BaseModel):
     spots_remaining: int
 
 
+# --- Founder Lifetime: RETIRED 2026-09-10 -----------------------------------
+# A one-time $99 sale took the buyers most willing to pay monthly and converted
+# them to $0 recurring — the opposite of what an MRR target needs. The tier can
+# no longer be bought. Everything that HONORS the tier stays intact: the webhook
+# still applies it, `require_pro` still accepts it, and admins can still grant
+# it manually as a comp. Existing founders are unaffected, permanently.
+
+
 @router.get("/billing/founder-spots")
 def founder_spots(session: Session = Depends(get_session)) -> dict:
-    """How many founder lifetime spots are left? Public — used by the
-    pricing page to show 'X of 100 spots remaining' (or hide the button
-    when sold out)."""
+    """Retired tier. Kept (rather than deleted) so any cached or third-party
+    client that still polls this gets a coherent 'nothing available' answer
+    instead of a 404. `remaining` is pinned to 0 by design."""
     sold = session.exec(
         select(User).where(User.subscription_tier == "founder_lifetime")
     ).all()
     return {
         "sold": len(sold),
         "cap": settings.founder_lifetime_spot_cap,
-        "remaining": max(0, settings.founder_lifetime_spot_cap - len(sold)),
+        "remaining": 0,
+        "retired": True,
     }
 
 
@@ -119,58 +128,20 @@ def create_founder_checkout(
     user: User = Depends(require_user),
     session: Session = Depends(get_session),
 ) -> FounderCheckoutResponse:
-    """One-time $99 payment for Founder Lifetime tier (Pro forever)."""
-    if not settings.stripe_secret_key:
-        raise HTTPException(503, "Stripe is not configured on this deployment.")
-    if not settings.stripe_price_founder_lifetime:
-        raise HTTPException(
-            503,
-            "Founder Lifetime price not configured — set STRIPE_PRICE_FOUNDER_LIFETIME.",
-        )
+    """Retired — no new Founder Lifetime purchases. Returns 410 Gone.
 
-    # Hard cap enforcement.
-    sold_count = len(session.exec(
-        select(User).where(User.subscription_tier == "founder_lifetime")
-    ).all())
-    if sold_count >= settings.founder_lifetime_spot_cap:
-        raise HTTPException(
-            410,  # 410 Gone — feels right for "no longer available"
-            f"All {settings.founder_lifetime_spot_cap} founder spots have been claimed. "
-            "Subscribe to Pro monthly or annual instead.",
-        )
-
-    # Already on this tier? No reason to buy again.
+    The route is deliberately kept so a stale client gets an explanatory error
+    it can display, rather than a bare 404 it will render as a crash.
+    """
     if user.subscription_tier == "founder_lifetime":
         raise HTTPException(
             409,
-            "You already have Founder Lifetime — no further payment needed.",
+            "You already have Founder Lifetime — Pro access for life, nothing further to pay.",
         )
-
-    customer_id = user.stripe_customer_id
-    base_url = settings.app_base_url.rstrip("/")
-    try:
-        sess = stripe.checkout.Session.create(
-            mode="payment",  # one-time, NOT subscription
-            line_items=[{"price": settings.stripe_price_founder_lifetime, "quantity": 1}],
-            success_url=f"{base_url}/billing/success?session_id={{CHECKOUT_SESSION_ID}}&plan=founder",
-            cancel_url=f"{base_url}/pricing?canceled=1",
-            client_reference_id=str(user.id),
-            customer=customer_id or None,
-            customer_email=user.email if not customer_id else None,
-            # The metadata is how the webhook knows to apply the lifetime tier
-            # instead of regular Pro. Without it, both buy-Pro and buy-Founder
-            # would land as the same tier change.
-            metadata={"user_id": str(user.id), "plan": "founder_lifetime"},
-            allow_promotion_codes=False,  # No promo codes on the lifetime tier
-        )
-    except stripe.StripeError as e:
-        log.exception("Founder Lifetime checkout session creation failed for user %s", user.id)
-        raise HTTPException(502, f"Stripe error: {e.user_message or str(e)}")
-
-    return FounderCheckoutResponse(
-        url=sess.url,
-        session_id=sess.id,
-        spots_remaining=settings.founder_lifetime_spot_cap - sold_count - 1,
+    raise HTTPException(
+        410,  # Gone — the tier existed, and no longer does.
+        "Founder Lifetime is no longer offered. Pro monthly ($19) and annual "
+        "($190) are available on the pricing page.",
     )
 
 

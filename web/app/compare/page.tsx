@@ -443,10 +443,6 @@ export default function ComparePage() {
                 Pro — <strong>$19/mo</strong> or <strong>$190/yr</strong> —
                 every feature above unlocked
               </li>
-              <li>
-                Founder Lifetime — <strong>$99 one-time</strong>, capped at 100
-                seats
-              </li>
             </ul>
             <p className="text-[10px] text-zinc-500 mt-3 leading-relaxed">
               One tier. No feature gates by portfolio count. Cancel any time in

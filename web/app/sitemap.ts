@@ -16,6 +16,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return [
     { url: `${base}/`, lastModified, priority: 1.0, changeFrequency: "daily" },
     { url: `${base}/pricing`, lastModified, priority: 0.9, changeFrequency: "weekly" },
+    { url: `${base}/xrpl`, lastModified, priority: 0.9, changeFrequency: "weekly" },
+    { url: "https://xrpl.evernorthstar.app", lastModified, priority: 0.9, changeFrequency: "weekly" },
     { url: `${base}/compare`, lastModified, priority: 0.8, changeFrequency: "monthly" },
     { url: `${base}/planner`, lastModified, priority: 0.7, changeFrequency: "monthly" },
     { url: `${base}/sign-up`, lastModified, priority: 0.7, changeFrequency: "monthly" },
