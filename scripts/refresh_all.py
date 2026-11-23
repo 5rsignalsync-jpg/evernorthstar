@@ -61,6 +61,15 @@ def main() -> int:
                    help="Skip the Congress (FMP) phase even if FMP_API_KEY is set.")
     p.add_argument("--skip-earnings", action="store_true",
                    help="Skip the earnings-calendar (FMP) phase.")
+    p.add_argument("--skip-13f", action="store_true",
+                   help="Skip the 13F (SEC EDGAR, Berkshire/Scion/Pershing/Soros/ARK/etc.) "
+                        "quarterly institutional-holdings ingest. 13Fs land ~45 days post "
+                        "quarter-end so weekly runs are enough, but it's safe to include daily.")
+    p.add_argument("--skip-form4", action="store_true",
+                   help="Skip the Form 4 (SEC EDGAR) insider-trades ingest. Insiders file "
+                        "within 2 business days so this is the freshest smart-money signal.")
+    p.add_argument("--form4-lookback-days", type=int, default=30,
+                   help="How far back to scan Form 4 filings on each run (default 30).")
     p.add_argument("--congress-lookback-days", type=int, default=180)
     p.add_argument("--penny-screen", action="store_true",
                    help="Re-run the live penny-stock screener (~3-10 min). "
@@ -82,6 +91,8 @@ def main() -> int:
         args.skip_news = True
         args.skip_congress = True
         args.skip_earnings = True
+        args.skip_13f = True
+        args.skip_form4 = True
         if args.crypto_since == "30d":
             args.crypto_since = "2d"
 
@@ -159,6 +170,27 @@ def main() -> int:
             from crypto_trends.data.ingest.earnings import ingest
             return ingest(lookahead_days=30, lookback_days=14)
         results.append(_run_phase("earnings", _earnings))
+
+    # 4d) 13F institutional holdings (SEC EDGAR — Berkshire, Scion, Pershing,
+    # Soros, ARK, Renaissance, Citadel, Tudor). Quarterly filings land ~45
+    # days post quarter-end. Running daily is fine — the ingester
+    # de-duplicates on accession number so repeats are no-ops when nothing
+    # new was filed. This phase was previously missing from the pipeline,
+    # which is why the Smart Money strategies page was stuck at Q1 2026
+    # ("Last disclosure: 2026-05-15") for six months.
+    if not args.skip_13f:
+        def _ingest_13f():
+            from crypto_trends.data.ingest.edgar import ingest_13f_all
+            return ingest_13f_all()
+        results.append(_run_phase("13f", _ingest_13f))
+
+    # 4e) Form 4 insider trades (SEC EDGAR). Insiders must file within 2
+    # business days, so this is our freshest smart-money signal — run daily.
+    if not args.skip_form4:
+        def _ingest_form4():
+            from crypto_trends.data.ingest.edgar import ingest_form4_for_universe
+            return ingest_form4_for_universe(lookback_days=args.form4_lookback_days)
+        results.append(_run_phase("form4", _ingest_form4))
 
     # 5) Signals (all asset classes, all signals — or just crypto if --crypto-only)
     if not args.skip_signals:
