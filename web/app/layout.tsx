@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AuthProvider } from "@/components/AuthProvider";
 import { Footer } from "@/components/Footer";
@@ -65,6 +65,30 @@ export const metadata: Metadata = {
     },
   },
   category: "finance",
+  // PWA integration — tells iOS to treat the site as an installable app
+  // and gives it a native status-bar style. Android/Chrome read manifest.ts
+  // directly, no extra metadata needed.
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "EverNorthstar",
+    statusBarStyle: "black-translucent",
+  },
+  icons: {
+    icon: "/icon",
+    apple: "/apple-icon",
+  },
+};
+
+// Separate viewport export is the Next 15/16 pattern (used to live on
+// Metadata). themeColor paints the mobile browser chrome dark to match
+// our palette; viewportFit=cover lets the app render under the iOS notch
+// when installed as a standalone PWA.
+export const viewport: Viewport = {
+  themeColor: "#0a0a0a",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
