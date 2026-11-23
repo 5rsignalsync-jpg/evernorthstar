@@ -87,6 +87,33 @@ export function SmartMoneyTab({
         three into a single conviction score per ticker.
       </div>
 
+      {/* XRPL adoption tracker — sibling product that lives in the same
+          "institutional flows + verifiable data" conceptual lane as Smart
+          Money. Prominent placement here (not buried in footer) because
+          this is where Pro users spend the most time. */}
+      <a
+        href="/xrpl"
+        className="block rounded-md border border-emerald-500/40 bg-gradient-to-r from-emerald-500/10 to-blue-500/10 hover:from-emerald-500/20 hover:to-blue-500/20 px-4 py-3 transition group"
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] uppercase tracking-widest text-emerald-400 mb-0.5">
+              Companion tracker
+            </p>
+            <p className="text-sm font-semibold text-emerald-100 group-hover:text-white">
+              🛰️ XRPL Adoption Tracker — the honest institutional data
+            </p>
+            <p className="text-[11px] text-zinc-400 mt-0.5 truncate">
+              Tokenized RWA value, RLUSD growth, ETF flows, named bank integrations,
+              protocol roadmap, "what has to happen" gap analysis for each XRP price target.
+            </p>
+          </div>
+          <span className="text-emerald-300 shrink-0 text-xl group-hover:translate-x-1 transition-transform">
+            →
+          </span>
+        </div>
+      </a>
+
       {error && (
         <div className="rounded-md border border-rose-700/40 bg-rose-900/20 px-4 py-3 text-sm text-rose-200">
           API error: {error}
