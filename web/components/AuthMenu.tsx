@@ -14,6 +14,13 @@ export function AuthMenu() {
     return (
       <div className="flex items-center gap-2 text-sm">
         <Link
+          href="/xrpl"
+          className="text-zinc-400 hover:text-zinc-100 text-xs hidden sm:inline"
+          title="XRPL adoption tracker — honest data on institutional adoption"
+        >
+          XRPL
+        </Link>
+        <Link
           href="/sign-in"
           className="text-zinc-300 hover:text-zinc-100"
         >
@@ -31,6 +38,13 @@ export function AuthMenu() {
 
   return (
     <div className="flex items-center gap-3 text-sm">
+      <Link
+        href="/xrpl"
+        className="text-zinc-400 hover:text-zinc-100 text-xs hidden sm:inline"
+        title="XRPL adoption tracker — honest data on institutional adoption"
+      >
+        XRPL
+      </Link>
       <Link
         href="/planner"
         className="text-zinc-400 hover:text-zinc-100 text-xs hidden sm:inline"
