@@ -1,0 +1,44 @@
+# XRPL adoption metrics refresh — mirrors refresh-data.yml.
+#
+# The APScheduler job in crypto_trends.scheduler runs this inside the
+# live Fly machine every 6h automatically; this GitHub Action is a
+# manual-trigger fallback (workflow_dispatch) for the operator and a
+# wake-at-start safety net (runs twice a day) in case the scheduler
+# missed a tick after a redeploy.
+#
+# Requires repo secret FLY_API_TOKEN.
+
+name: XRPL adoption refresh
+
+on:
+  schedule:
+    - cron: '20 */6 * * *'   # every 6h at :20, offset from the in-process :07 tick
+  workflow_dispatch:         # manual trigger from Actions tab
+
+jobs:
+  refresh-xrpl:
+    name: Refresh XRPL metrics on Fly
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Wake the Fly machine
+        run: |
+          for i in 1 2 3 4 5; do
+            if curl -s -m 10 -f https://evernorthstar.fly.dev/health > /dev/null; then
+              echo "Machine awake (attempt $i)"
+              exit 0
+            fi
+            echo "Machine still cold (attempt $i), sleeping…"
+            sleep 4
+          done
+          echo "Could not wake machine after 5 attempts"
+          exit 1
+
+      - name: Run XRPL refresh on Fly
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          flyctl ssh console -a evernorthstar \
+            -C "python -m scripts.refresh_xrpl"
