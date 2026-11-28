@@ -26,6 +26,7 @@ export function Footer() {
           <ul className="space-y-1">
             <li><Link href="/" className="hover:text-zinc-200">Dashboard</Link></li>
             <li><Link href="/xrpl" className="hover:text-zinc-200">XRPL Adoption Tracker</Link></li>
+            <li><Link href="/xrp-starter" className="hover:text-zinc-200">Honest XRP Starter Kit</Link></li>
             <li><Link href="/pricing" className="hover:text-zinc-200">Pricing</Link></li>
             <li><Link href="/portfolio" className="hover:text-zinc-200">Portfolio (Pro)</Link></li>
             <li><Link href="/account" className="hover:text-zinc-200">Account</Link></li>
