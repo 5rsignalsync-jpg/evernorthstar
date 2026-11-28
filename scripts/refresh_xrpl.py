@@ -13,6 +13,7 @@ import logging
 import sys
 
 from crypto_trends.data.ingest.xrpl import refresh_all
+from crypto_trends.data.store import init_db
 
 
 def main() -> int:
@@ -20,6 +21,9 @@ def main() -> int:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
+    # Idempotent — brings xrpl_metrics (and any newer DuckDB tables) into
+    # existence on a machine that was deployed before the schema change.
+    init_db()
     outcomes = refresh_all()
     for key, status in outcomes.items():
         print(f"  {key}: {status}")

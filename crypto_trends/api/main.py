@@ -80,6 +80,12 @@ def _startup() -> None:
     configure_logging()
     assert_production_ready()
     init_users_db()
+    # Apply any new DuckDB tables added since last deploy (idempotent;
+    # the schema is all CREATE TABLE IF NOT EXISTS). Without this, a
+    # schema.sql change ships with a deploy but the table never
+    # materializes until something hand-runs `python -m crypto_trends.data.store`.
+    from crypto_trends.data.store import init_db as init_duckdb
+    init_duckdb()
     # Intraday crypto refresh fires every 15 min from inside this process so
     # it writes to the same DuckDB the API reads. Needs min_machines_running=1
     # in fly.toml so the scheduler isn't napped by auto-stop.
