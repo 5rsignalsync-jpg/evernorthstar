@@ -58,6 +58,33 @@ async def _run_intraday_crypto_refresh() -> None:
     log.info("intraday_crypto: done total_duration_s=%.1f", total)
 
 
+async def _run_xrpl_refresh() -> None:
+    """Refresh the /xrpl tracker's metrics (amendments, RLUSD, ETF, RWA).
+
+    Separate from intraday_crypto because:
+      - source rate limits are different (CoinGecko, SoSoValue)
+      - every 6h is plenty — adoption metrics don't move intraday
+      - failure here must not block price-driven alerts
+    """
+    started = datetime.utcnow()
+    log.info("xrpl_refresh: start ts=%s", started.isoformat())
+    proc = await asyncio.create_subprocess_exec(
+        sys.executable, "-m", "scripts.refresh_xrpl",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+    )
+    stdout, _ = await proc.communicate()
+    duration = (datetime.utcnow() - started).total_seconds()
+    tail = (stdout or b"").decode("utf-8", errors="replace")[-2000:]
+    if proc.returncode == 0:
+        log.info("xrpl_refresh: ok duration_s=%.1f\n%s", duration, tail)
+    else:
+        log.error(
+            "xrpl_refresh: FAILED rc=%d duration_s=%.1f\n%s",
+            proc.returncode, duration, tail,
+        )
+
+
 def start_scheduler() -> None:
     """Start the APScheduler at FastAPI startup. Idempotent."""
     global _scheduler
@@ -74,9 +101,22 @@ def start_scheduler() -> None:
         coalesce=True,        # if we miss firings, collapse to one
         misfire_grace_time=600,
     )
+    sched.add_job(
+        _run_xrpl_refresh,
+        # Every 6h starting at 02:07 UTC — offset from :00 so we don't
+        # pile onto the intraday_crypto :00 firings, and from :15/:30/:45
+        # so we never overlap. 6h cadence is well inside CoinGecko's
+        # free-tier rate ceiling.
+        trigger=CronTrigger(hour="*/6", minute="7"),
+        id="xrpl_refresh",
+        name="XRPL adoption metrics refresh",
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=1800,
+    )
     sched.start()
     _scheduler = sched
-    log.info("scheduler: started intraday_crypto every 15 min")
+    log.info("scheduler: started intraday_crypto (15min) + xrpl_refresh (6h)")
 
 
 def stop_scheduler() -> None:

@@ -1,11 +1,47 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-// XRPL adoption tracker — MVP. Hand-curated data for launch; automated
-// pipeline (DeFiLlama, XRPSCAN, CoinGecko, SoSoValue APIs) ships in V1.
-// Positioned as the honest alternative to xrptracer.xyz: objective
-// metrics, cited sources, explicit "to-get-there" gap analysis.
+// XRPL adoption tracker. Live metrics come from the backend's
+// /xrpl/metrics endpoint (refreshed every 6h by the APScheduler job in
+// crypto_trends.scheduler). ISR caches the server render for 30 min.
+// Hard-coded constants below are the fallback for keys the backend
+// doesn't currently populate (pipeline rows, gap analysis, YoY table,
+// bank integration list) — those are editorial, not feed-driven.
 // Lives at /xrpl AND via middleware at xrpl.evernorthstar.app.
+
+export const revalidate = 1800; // 30 minutes
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+
+type ApiMetric = {
+  metric_key: string;
+  value_text: string;
+  value_numeric: number | null;
+  sub_text: string | null;
+  source: string | null;
+  as_of_date: string | null;
+  fetched_at: string;
+};
+
+type MetricsPayload = {
+  metrics: Record<string, ApiMetric>;
+  last_refresh: string | null;
+};
+
+async function fetchMetrics(): Promise<MetricsPayload> {
+  try {
+    const r = await fetch(`${API_BASE}/xrpl/metrics`, {
+      next: { revalidate: 1800 },
+    });
+    if (!r.ok) {
+      return { metrics: {}, last_refresh: null };
+    }
+    return (await r.json()) as MetricsPayload;
+  } catch {
+    // Backend down, DNS hiccup, cold start timeout — fall back silently.
+    return { metrics: {}, last_refresh: null };
+  }
+}
 
 export const metadata: Metadata = {
   title: "XRPL Adoption Tracker — The Honest Snapshot | EverNorthstar",
@@ -24,28 +60,32 @@ export const metadata: Metadata = {
   },
 };
 
-// Hand-curated snapshot. These update when I revise this file; the V1
-// automation ships 2-3 weeks out. For MVP, weekly manual refresh is fine
-// and gives us the content moat (analysis + curation = defensible value).
+// NOW_METRICS fallback. apiKey is the metric_key from the backend —
+// when the API returns that key, we overlay its value/sub/source onto
+// this row. Rows without an apiKey are editorial (hand-curated).
 const NOW_METRICS: Array<{
+  apiKey?: string;
   label: string;
   value: string;
   sub?: string;
   source: string;
 }> = [
   {
+    apiKey: "rwa_total_usd",
     label: "Tokenized RWA value on XRPL",
     value: "~$3.6B",
     sub: "On-chain measure (rwa.xyz). ~50% in a single Justoken JMWH energy token — concentration risk is real.",
     source: "rwa.xyz · as of 2026-11-27",
   },
   {
+    apiKey: "rlusd_supply_usd",
     label: "RLUSD circulating supply",
     value: "$2.87B",
     sub: "From $0 at Dec 2024 launch",
     source: "CoinGecko · as of 2026-11-22",
   },
   {
+    apiKey: "xrp_etf_net_assets_usd",
     label: "US spot XRP ETF net assets",
     value: "$1.15B",
     sub: "Cumulative inflows $1.79B · week of Nov 9-13 saw -$19.1M outflow (largest in 8 months)",
@@ -72,16 +112,19 @@ const NOW_METRICS: Array<{
 ];
 
 const PROTOCOL_STATUS: Array<{
+  apiKey?: string;
   item: string;
   status: string;
   detail: string;
 }> = [
   {
+    apiKey: "xls_65_status",
     item: "XLS-65 SingleAssetVault",
     status: "PASSED — activates Dec 9 2026",
     detail: "Lending collateral primitive. Validator majority reached Nov 25 2026; 14-day activation hold in progress.",
   },
   {
+    apiKey: "xls_66_status",
     item: "XLS-66 LendingProtocol",
     status: "PASSED — activates Dec 11 2026",
     detail: "Native XRPL lending (29/35 validator votes). Majority reached Nov 27 2026; 14-day activation hold in progress.",
@@ -354,7 +397,55 @@ function Metric({
   );
 }
 
-export default function XrplTrackerPage() {
+function overlayMetric<T extends { apiKey?: string; value: string; sub?: string; source: string }>(
+  base: T,
+  api: Record<string, ApiMetric>,
+): T {
+  if (!base.apiKey) return base;
+  const live = api[base.apiKey];
+  if (!live) return base;
+  const asOf = live.as_of_date ? new Date(live.as_of_date).toISOString().slice(0, 10) : null;
+  return {
+    ...base,
+    value: live.value_text || base.value,
+    sub: live.sub_text ?? base.sub,
+    source: live.source
+      ? asOf ? `${live.source} · as of ${asOf}` : live.source
+      : base.source,
+  };
+}
+
+function overlayProtocol<T extends { apiKey?: string; status: string; detail: string }>(
+  base: T,
+  api: Record<string, ApiMetric>,
+): T {
+  if (!base.apiKey) return base;
+  const live = api[base.apiKey];
+  if (!live) return base;
+  return {
+    ...base,
+    status: live.value_text || base.status,
+    detail: live.sub_text ?? base.detail,
+  };
+}
+
+function formatLastRefresh(iso: string | null): string {
+  if (!iso) return "Data as of: Nov 27 2026 · refresh pending";
+  const d = new Date(iso);
+  const date = d.toLocaleDateString(undefined, {
+    year: "numeric", month: "short", day: "numeric",
+  });
+  const time = d.toLocaleTimeString(undefined, {
+    hour: "2-digit", minute: "2-digit", timeZoneName: "short",
+  });
+  return `Last auto-refresh: ${date} ${time}`;
+}
+
+export default async function XrplTrackerPage() {
+  const { metrics, last_refresh } = await fetchMetrics();
+  const liveNowMetrics = NOW_METRICS.map((m) => overlayMetric(m, metrics));
+  const liveProtocol = PROTOCOL_STATUS.map((p) => overlayProtocol(p, metrics));
+
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100">
       {/* Hero */}
@@ -393,11 +484,11 @@ export default function XrplTrackerPage() {
             NOW — Current adoption snapshot
           </h2>
           <p className="text-xs text-zinc-500">
-            Data as of: Nov 27 2026 · Daily auto-refresh ships this week
+            {formatLastRefresh(last_refresh)}
           </p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {NOW_METRICS.map((m) => (
+          {liveNowMetrics.map((m) => (
             <Metric key={m.label} {...m} />
           ))}
         </div>
@@ -440,7 +531,7 @@ export default function XrplTrackerPage() {
           Protocol status — amendments + roadmap
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {PROTOCOL_STATUS.map((p) => (
+          {liveProtocol.map((p) => (
             <div
               key={p.item}
               className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4"
@@ -591,10 +682,12 @@ export default function XrplTrackerPage() {
             DeFiLlama, XRPSCAN, company earnings reports).
           </p>
           <p>
-            <strong className="text-zinc-300">Hand-curated for MVP.</strong>{" "}
-            This page is manually updated weekly for now. Automated daily
-            refreshes (DeFiLlama, XRPSCAN, CoinGecko, SoSoValue APIs) ship in
-            the next 2-3 weeks.
+            <strong className="text-zinc-300">Partial automation.</strong>{" "}
+            Core metrics (RLUSD supply via CoinGecko, XRP ETF via SoSoValue,
+            tokenized RWA via rwa.xyz, XRPL amendment status) auto-refresh
+            every 6 hours from the EverNorthstar backend. Editorial sections
+            (pipeline, bank integrations, gap analysis) are hand-curated —
+            auto-pipelines for those are coming.
           </p>
           <p>
             <strong className="text-zinc-300">Named integrations</strong> are

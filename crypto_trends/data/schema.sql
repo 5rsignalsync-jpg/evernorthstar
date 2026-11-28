@@ -130,3 +130,21 @@ CREATE TABLE IF NOT EXISTS earnings_calendar (
     PRIMARY KEY (symbol, date)
 );
 CREATE INDEX IF NOT EXISTS idx_earnings_date ON earnings_calendar(date);
+
+-- XRPL adoption tracker metrics. Hand-curated snapshot has been the MVP;
+-- this table backs the automated daily refresh that renders at /xrpl.
+-- Each row is one metric; we keep history (one row per fetched_at) so the
+-- page can show sparklines later without a schema change. The /xrpl API
+-- endpoint returns the latest row per metric_key.
+CREATE TABLE IF NOT EXISTS xrpl_metrics (
+    metric_key      VARCHAR NOT NULL,   -- e.g. "rwa_total_usd", "rlusd_supply_usd", "etf_net_assets_usd"
+    value_text      VARCHAR,            -- display string, e.g. "$3.6B" or "PASSED — activates Dec 9 2026"
+    value_numeric   DOUBLE,             -- machine-readable where it makes sense; NULL otherwise
+    sub_text        VARCHAR,            -- secondary line (e.g. "~50% Justoken concentration")
+    source          VARCHAR,            -- cite-able source string shown in UI
+    as_of_date      DATE,               -- the date the underlying measurement applies to
+    fetched_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (metric_key, fetched_at)
+);
+CREATE INDEX IF NOT EXISTS idx_xrpl_metrics_key_time
+    ON xrpl_metrics(metric_key, fetched_at DESC);
