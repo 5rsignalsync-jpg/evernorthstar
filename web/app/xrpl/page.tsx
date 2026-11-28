@@ -35,9 +35,9 @@ const NOW_METRICS: Array<{
 }> = [
   {
     label: "Tokenized RWA value on XRPL",
-    value: "~$6.7B",
-    sub: "Up from ~$390M a year ago (≈17×)",
-    source: "RippleX (Markus Infanger, Estadão interview)",
+    value: "~$3.6B",
+    sub: "On-chain measure (rwa.xyz). ~50% in a single Justoken JMWH energy token — concentration risk is real.",
+    source: "rwa.xyz · as of 2026-11-27",
   },
   {
     label: "RLUSD circulating supply",
@@ -47,14 +47,14 @@ const NOW_METRICS: Array<{
   },
   {
     label: "US spot XRP ETF net assets",
-    value: "$989.6M",
-    sub: "Cumulative inflows $1.78B · Nov outflow -$30.8M",
-    source: "SoSoValue · as of 2026-11-20",
+    value: "$1.15B",
+    sub: "Cumulative inflows $1.79B · week of Nov 9-13 saw -$19.1M outflow (largest in 8 months)",
+    source: "SoSoValue · as of 2026-11-13",
   },
   {
     label: "Named production bank integrations",
-    value: "15+",
-    sub: "BNY Mellon, Standard Chartered, Cross River, SBI, HSBC, Kyobo, Meritz, Jeonbuk, Deutsche Bank (announced), Robinhood (institutional), +",
+    value: "16+",
+    sub: "BNY Mellon, Standard Chartered, Cross River, SBI, HSBC, Kyobo, Meritz, Jeonbuk, Yapı Kredi (Türkiye, Nov 25 2026), Deutsche Bank (announced), Robinhood (institutional), +",
     source: "Ripple press releases 2026",
   },
   {
@@ -78,18 +78,18 @@ const PROTOCOL_STATUS: Array<{
 }> = [
   {
     item: "XLS-65 SingleAssetVault",
-    status: "25/28 validator votes",
-    detail: "Lending collateral primitive. 3 more votes needed; activates after 14-day hold.",
+    status: "PASSED — activates Dec 9 2026",
+    detail: "Lending collateral primitive. Validator majority reached Nov 25 2026; 14-day activation hold in progress.",
   },
   {
     item: "XLS-66 LendingProtocol",
-    status: "24/28 validator votes",
-    detail: "Native XRPL lending. 4 more votes needed; activates after 14-day hold.",
+    status: "PASSED — activates Dec 11 2026",
+    detail: "Native XRPL lending (29/35 validator votes). Majority reached Nov 27 2026; 14-day activation hold in progress.",
   },
   {
     item: "XRPL V1_1 patch",
-    status: "24/28 validator votes",
-    detail: "Protocol patch. Same activation flow.",
+    status: "In voting (denominator /35)",
+    detail: "Protocol patch. XRPL default UNL migrated to ~35 validators in late 2025, so vote counts now use /35, not /28.",
   },
   {
     item: "Permissioned DEX",
@@ -274,8 +274,8 @@ const YOY_COMPARISON: Array<{
   {
     metric: "Tokenized RWA value on XRPL",
     nov2025: "$364M (Messari Q3) / $394M",
-    nov2026: "~$6.7B",
-    change: "+17× to +18×",
+    nov2026: "~$3.6B (rwa.xyz on-chain)",
+    change: "+9× to +10×",
   },
   {
     metric: "RLUSD circulating supply",
@@ -286,13 +286,13 @@ const YOY_COMPARISON: Array<{
   {
     metric: "US spot XRP ETF AUM",
     nov2025: "$336M (Canary XRPC alone)",
-    nov2026: "$989.6M (all issuers)",
-    change: "+2.9×",
+    nov2026: "$1.15B (all issuers)",
+    change: "+3.4×",
   },
   {
     metric: "ETF cumulative inflows",
     nov2025: "~$336M",
-    nov2026: "$1.78B",
+    nov2026: "$1.79B",
     change: "+5.3×",
   },
   {
@@ -304,8 +304,8 @@ const YOY_COMPARISON: Array<{
   {
     metric: "Named production bank integrations",
     nov2025: "~2-3 verified",
-    nov2026: "15+",
-    change: "+5-7×",
+    nov2026: "16+",
+    change: "+5-8×",
   },
   {
     metric: "Federally regulated Ripple banking entity",
@@ -316,7 +316,7 @@ const YOY_COMPARISON: Array<{
   {
     metric: "Native XRPL lending",
     nov2025: "Experimental / off-ledger",
-    nov2026: "XLS-65/66 at 25/28, 24/28 votes — activating",
+    nov2026: "XLS-65 passed Nov 25 (activates Dec 9) · XLS-66 passed Nov 27 (activates Dec 11)",
     change: "new primitive",
   },
   {
@@ -393,11 +393,7 @@ export default function XrplTrackerPage() {
             NOW — Current adoption snapshot
           </h2>
           <p className="text-xs text-zinc-500">
-            Last updated: {new Date().toLocaleDateString(undefined, {
-              year: "numeric",
-              month: "short",
-              day: "numeric",
-            })}
+            Data as of: Nov 27 2026 · Daily auto-refresh ships this week
           </p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
